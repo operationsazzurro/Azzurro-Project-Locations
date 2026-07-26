@@ -464,20 +464,42 @@ async function fetchSites(){
   }));
 }
 
+// ---------- Storage wrapper: uses window.storage inside Claude's artifact
+// preview if present, otherwise falls back to the browser's own localStorage
+// (which is what applies once this file is downloaded and opened directly). ----------
+async function storageSet(key, value){
+  if(window.storage && typeof window.storage.set === 'function'){
+    try{ await window.storage.set(key, value); return; }catch(e){ /* fall through */ }
+  }
+  try{ localStorage.setItem(key, value); }catch(e){ /* storage unavailable, ignore */ }
+}
+async function storageGet(key){
+  if(window.storage && typeof window.storage.get === 'function'){
+    try{ const r = await window.storage.get(key); return r ? r.value : null; }catch(e){ /* fall through */ }
+  }
+  try{ return localStorage.getItem(key); }catch(e){ return null; }
+}
+async function storageDelete(key){
+  if(window.storage && typeof window.storage.delete === 'function'){
+    try{ await window.storage.delete(key); return; }catch(e){ /* fall through */ }
+  }
+  try{ localStorage.removeItem(key); }catch(e){ /* ignore */ }
+}
+
 // ---------- Admin auth (Supabase Auth — real login, not a client-side password) ----------
 async function loadAdminSession(){
   try{
-    const res = await window.storage.get('admin-session');
-    if(res && res.value){
-      const s = JSON.parse(res.value);
+    const raw = await storageGet('admin-session');
+    if(raw){
+      const s = JSON.parse(raw);
       if(s && s.expires_at) { adminSession = s; return true; }
     }
   }catch(e){ /* not signed in */ }
   return false;
 }
 async function persistAdminSession(){
-  if(adminSession) await window.storage.set('admin-session', JSON.stringify(adminSession));
-  else await window.storage.delete('admin-session').catch(()=>{});
+  if(adminSession) await storageSet('admin-session', JSON.stringify(adminSession));
+  else await storageDelete('admin-session');
 }
 function isAdminSessionFresh(){
   return adminSession && adminSession.expires_at && (adminSession.expires_at * 1000) > (Date.now() + 30000);
