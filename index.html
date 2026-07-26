@@ -241,9 +241,9 @@
         <div class="empty-hint">Tick sites on the left, pick a start point, and the shortest visiting order will build here automatically.</div>
       </div>
       <div class="summary">
-        <div class="total"><span>Straight-line total</span><b id="totalDist">— km</b></div>
+        <div class="total"><span>Route total</span><b id="totalDist">— km</b></div>
         <a href="#" target="_blank" class="gmaps-btn" id="openGmaps">Open Route in Google Maps</a>
-        <div class="gmaps-note">Order is optimized by straight-line distance (nearest-stop-next). Google Maps will route actual roads; for runs over 9 stops it may split into legs — the manifest above is your master sequence.</div>
+        <div class="gmaps-note">Order and distances are calculated from real road routing (nearest-stop-next by driving distance). For runs over 9 stops Google Maps may split into legs — the manifest above is your master sequence.</div>
       </div>
     </div>
   </div>
@@ -423,7 +423,31 @@ function popupHtml(s){
   </div>`;
 }
 
-function computeRoute(){
+let routeReqId = 0;
+
+// Fetch a full driving distance/duration matrix from OSRM (meters/seconds)
+async function osrmTable(points){
+  const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/table/v1/driving/${coords}?annotations=distance,duration`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.code !== 'Ok') throw new Error(data.message || 'Table request failed');
+  return data; // { distances: [][], durations: [][] }
+}
+
+// Fetch actual road geometry + total distance/duration for an ORDERED sequence of stops
+async function osrmRoute(points){
+  const coords = points.map(p => `${p.lng},${p.lat}`).join(';');
+  const url = `https://router.project-osrm.org/route/v1/driving/${coords}?overview=full&geometries=geojson`;
+  const res = await fetch(url);
+  const data = await res.json();
+  if(data.code !== 'Ok' || !data.routes.length) throw new Error(data.message || 'Route request failed');
+  const r = data.routes[0];
+  return { coords: r.geometry.coordinates.map(c => [c[1], c[0]]), distance: r.distance, duration: r.duration };
+}
+
+async function computeRoute(){
+  const myReq = ++routeReqId;
   const chosen = sitesForManager(state.manager).filter(s => state.checked.has(s.id) && s.valid);
   const manifestEl = document.getElementById('manifest');
   const countEl = document.getElementById('manifestCount');
@@ -437,7 +461,7 @@ function computeRoute(){
   });
 
   if(chosen.length === 0){
-    manifestEl.innerHTML = '<div class="empty-hint">Tick sites on the left, pick a start point, and the shortest visiting order will build here automatically.</div>';
+    manifestEl.innerHTML = '<div class="empty-hint">Tick sites on the left, pick a start point, and the shortest driving order will build here automatically.</div>';
     countEl.textContent = '';
     document.getElementById('totalDist').textContent = '— km';
     document.getElementById('openGmaps').href = '#';
@@ -457,16 +481,48 @@ function computeRoute(){
   const startSite = state.start === 'gps'
     ? { id: 'gps', name: 'My Current Location', lat: gpsPos.lat, lng: gpsPos.lng }
     : (SITES.find(s => s.id === state.start && s.valid) || chosen[0]);
-  let pool = chosen.filter(s => s.id !== startSite.id);
-  let route = [];
-  let current = startSite;
-  while(pool.length){
-    let bestIdx = 0, bestDist = Infinity;
-    pool.forEach((s, idx) => { const d = haversine(current, s); if(d < bestDist){ bestDist = d; bestIdx = idx; } });
-    route.push({ site: pool[bestIdx], leg: bestDist });
-    current = pool[bestIdx];
-    pool.splice(bestIdx, 1);
+  const pool0 = chosen.filter(s => s.id !== startSite.id);
+  const allPoints = [startSite, ...pool0]; // index 0 = start
+
+  manifestEl.innerHTML = '<div class="status-line"><div class="dot"></div>Calculating driving distances…</div>';
+
+  let distMeters = null; // distMeters[i][j] in meters, driving
+  let usedFallback = false;
+  try{
+    if(allPoints.length > 1){
+      const table = await osrmTable(allPoints);
+      distMeters = table.distances;
+    }
+  }catch(e){
+    usedFallback = true;
   }
+  if(myReq !== routeReqId) return; // a newer request superseded this one
+
+  // Nearest-neighbor ordering using driving distance (falls back to straight-line if OSRM table failed)
+  let poolIdx = pool0.map((_, i) => i + 1); // indices into allPoints
+  let route = [];
+  let currentIdx = 0;
+  while(poolIdx.length){
+    let bestPos = 0, bestDist = Infinity;
+    poolIdx.forEach((idx, pos) => {
+      const d = distMeters ? distMeters[currentIdx][idx] : haversine(allPoints[currentIdx], allPoints[idx]) * 1000;
+      if(d < bestDist){ bestDist = d; bestPos = pos; }
+    });
+    const chosenIdx = poolIdx[bestPos];
+    route.push({ site: allPoints[chosenIdx], legMeters: bestDist });
+    currentIdx = chosenIdx;
+    poolIdx.splice(bestPos, 1);
+  }
+
+  if(myReq !== routeReqId) return;
+
+  // Try to get the real road geometry + accurate total for the ordered sequence
+  const orderedPoints = [startSite, ...route.map(r => r.site)];
+  let roadGeometry = null;
+  try{
+    if(orderedPoints.length > 1) roadGeometry = await osrmRoute(orderedPoints);
+  }catch(e){ /* fall back to straight lines below */ }
+  if(myReq !== routeReqId) return;
 
   manifestEl.innerHTML = '';
   countEl.textContent = `${route.length + 1} stops`;
@@ -477,18 +533,19 @@ function computeRoute(){
   startStub.onclick = () => focusSite(startSite);
   manifestEl.appendChild(startStub);
 
-  const latlngs = [[startSite.lat, startSite.lng]];
   route.forEach((r, i) => {
-    cum += r.leg;
-    latlngs.push([r.site.lat, r.site.lng]);
+    const legKm = r.legMeters / 1000;
+    cum += legKm;
     const stub = document.createElement('div');
     stub.className = 'stub';
-    stub.innerHTML = `<div class="tagnum">${i+1}</div><div class="body"><div class="name">${r.site.name}</div><div class="legline"><span class="leg">+${r.leg.toFixed(1)} km</span><span class="cum">${cum.toFixed(1)} km total</span></div></div>`;
+    stub.innerHTML = `<div class="tagnum">${i+1}</div><div class="body"><div class="name">${r.site.name}</div><div class="legline"><span class="leg">+${legKm.toFixed(1)} km</span><span class="cum">${cum.toFixed(1)} km total</span></div></div>`;
     stub.onclick = () => focusSite(r.site);
     manifestEl.appendChild(stub);
   });
 
-  document.getElementById('totalDist').textContent = cum.toFixed(1) + ' km';
+  const totalLabel = roadGeometry ? (roadGeometry.distance / 1000).toFixed(1) : cum.toFixed(1);
+  const durLabel = roadGeometry ? ` · ~${Math.round(roadGeometry.duration/60)} min` : '';
+  document.getElementById('totalDist').textContent = totalLabel + ' km' + durLabel + (usedFallback ? ' (straight-line — driving service unavailable)' : ' driving');
 
   const startIcon = L.divIcon({ className:'', html:`<div class="num-pin start">S</div>`, iconSize:[24,24] });
   const startMarker = L.marker([startSite.lat, startSite.lng], { icon: startIcon }).bindTooltip(startSite.name).addTo(markerLayer);
@@ -498,16 +555,20 @@ function computeRoute(){
     L.marker([r.site.lat, r.site.lng], { icon }).bindPopup(popupHtml(r.site)).bindTooltip(r.site.name).addTo(markerLayer);
   });
 
-  routeLine = L.polyline(latlngs, { color:'#e8a33d', weight:2.5, opacity:0.8, dashArray:'1,6' }).addTo(map);
+  if(roadGeometry){
+    routeLine = L.polyline(roadGeometry.coords, { color:'#e8a33d', weight:4, opacity:0.85 }).addTo(map);
+  } else {
+    const latlngs = orderedPoints.map(p => [p.lat, p.lng]);
+    routeLine = L.polyline(latlngs, { color:'#e8a33d', weight:2.5, opacity:0.8, dashArray:'1,6' }).addTo(map);
+  }
   map.fitBounds(routeLine.getBounds(), { padding:[40,40] });
 
-  const stops = [startSite, ...route.map(r => r.site)];
   if(startSite.id === 'gps'){
     // Let Google Maps use the device's live location as the origin
     const dests = route.map(r => `${r.site.lat},${r.site.lng}`).join('/');
     document.getElementById('openGmaps').href = `https://www.google.com/maps/dir/Current+Location/${dests}`;
   } else {
-    document.getElementById('openGmaps').href = `https://www.google.com/maps/dir/${stops.map(s => `${s.lat},${s.lng}`).join('/')}`;
+    document.getElementById('openGmaps').href = `https://www.google.com/maps/dir/${orderedPoints.map(s => `${s.lat},${s.lng}`).join('/')}`;
   }
 }
 
