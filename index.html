@@ -797,6 +797,14 @@ function visibleSites(){
   if(state.search) list = list.filter(s => s.name.toLowerCase().includes(state.search.toLowerCase()));
   return list;
 }
+// Sites eligible to show as pins on the map — respects the manager/emirate
+// filters but NOT the checklist search box (search should only narrow the
+// list you're picking from, not hide pins on the map itself).
+function mapCandidateSites(){
+  let list = sitesForManager(state.manager);
+  if(state.emirate !== 'ALL') list = list.filter(s => s.emirate === state.emirate);
+  return list;
+}
 
 function initControls(){
   const mgrSel = document.getElementById('managerSelect');
@@ -971,7 +979,7 @@ async function computeRoute(){
   markerLayer.clearLayers();
   if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
 
-  visibleSites().forEach(s => {
+  mapCandidateSites().forEach(s => {
     if(!s.valid || state.checked.has(s.id)) return;
     const icon = L.divIcon({ className: '', html: `<div class="num-pin unrouted"></div>`, iconSize:[9,9] });
     L.marker([s.lat, s.lng], { icon }).bindPopup(popupHtml(s)).bindTooltip(s.name).addTo(markerLayer);
