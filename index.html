@@ -1003,8 +1003,17 @@ function popupHtml(s){
       <button onclick="window.routeFromGPS(${s.id})">🧭 Route</button>
       <button class="secondary" onclick="window.showStreetView(${s.id})">👁 Street View</button>
     </div>
+    <div class="prow" style="margin-top:6px;">
+      <button class="secondary" onclick="window.editSiteFromMap(${s.id})">✎ Edit Site</button>
+    </div>
   </div>`;
 }
+window.editSiteFromMap = function(siteId){
+  const site = SITES.find(s => s.id === siteId);
+  if(!site) return;
+  map.closePopup();
+  requireAdmin(() => openManage('edit', site));
+};
 
 let routeReqId = 0;
 
