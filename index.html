@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Dispatch — Site Visit Route Planner</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+  :root{
+    --ink:#12161d; --panel:#1a2029; --panel-raised:#212936; --hairline:#2c3543;
+    --text-primary:#eef1f5; --text-muted:#8b93a3; --text-dim:#5c6577;
+    --amber:#e8a33d; --amber-dim:#8a6427; --teal:#3ea8a0;
+    --danger:#e2604f; --danger-dim:#4a2c27;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;margin:0;}
+  body{ background:var(--ink); color:var(--text-primary); font-family:'Inter',sans-serif; display:flex; flex-direction:column; overflow:hidden; }
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-track{background:transparent;}
+  ::-webkit-scrollbar-thumb{background:var(--hairline);border-radius:4px;}
+
+  header{ display:flex; align-items:center; justify-content:space-between; padding:14px 22px; background:var(--panel); border-bottom:1px solid var(--hairline); flex-shrink:0; }
+  .brand{ display:flex; align-items:baseline; gap:10px; }
+  .brand .tag{ font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; color:var(--amber); border:1px solid var(--amber-dim); padding:2px 6px; border-radius:3px; }
+  .brand h1{ font-family:'Oswald',sans-serif; font-weight:600; font-size:19px; letter-spacing:0.02em; margin:0; text-transform:uppercase; }
+  .brand .sub{ font-size:11px; color:var(--text-dim); font-family:'IBM Plex Mono',monospace; }
+  header .meta{ display:flex; align-items:center; gap:14px; }
+  header .meta .stat{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted); text-align:right; }
+  .icon-btn{ background:var(--panel-raised); border:1px solid var(--hairline); color:var(--text-muted); width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .icon-btn:hover{ color:var(--amber); border-color:var(--amber-dim); }
+
+  .layout{ flex:1; display:flex; min-height:0; position:relative; }
+  #map{ flex:1; background:#0d1015; }
+  .sidebar{ width:380px; flex-shrink:0; display:flex; flex-direction:column; background:var(--panel); border-right:1px solid var(--hairline); min-height:0; }
+
+  .controls{ padding:16px 16px 12px 16px; border-bottom:1px solid var(--hairline); display:flex; flex-direction:column; gap:12px; }
+  .field label{ display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); margin-bottom:5px; font-weight:600; }
+  select, input[type=text], input[type=number], input[type=password]{ width:100%; background:var(--panel-raised); border:1px solid var(--hairline); color:var(--text-primary); padding:8px 10px; border-radius:5px; font-family:'Inter',sans-serif; font-size:13px; }
+  select:focus, input:focus{ outline:2px solid var(--amber); outline-offset:1px; }
+  .chip-row{ display:flex; gap:6px; }
+  .chip{ flex:1; text-align:center; padding:6px 0; border:1px solid var(--hairline); border-radius:5px; font-size:12px; font-weight:600; cursor:pointer; color:var(--text-muted); background:var(--panel-raised); user-select:none; }
+  .chip.active{ border-color:var(--amber); color:var(--amber); background:rgba(232,163,61,0.08); }
+  .select-actions{ display:flex; gap:8px; font-size:11px; }
+  .select-actions button{ background:none;border:none;color:var(--teal);cursor:pointer; font-family:'IBM Plex Mono',monospace;font-size:11px;padding:0; text-decoration:underline; text-underline-offset:2px; }
+
+  .list-wrap{ flex:1 1 40%; min-height:0; display:flex; flex-direction:column; border-bottom:1px solid var(--hairline); }
+  .list-head{ padding:10px 16px 6px 16px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); font-weight:600; display:flex; justify-content:space-between; }
+  .search-box{ padding:0 16px 8px 16px; }
+  .checklist{ flex:1; overflow-y:auto; padding:0 10px 10px 10px; }
+  .site-row{ display:flex; align-items:flex-start; gap:9px; padding:7px 6px; border-radius:5px; cursor:pointer; }
+  .site-row:hover{ background:var(--panel-raised); }
+  .site-row input{ margin-top:3px; accent-color:var(--amber); }
+  .site-row .name{ font-size:12.5px; line-height:1.35; }
+  .site-row .emirate-tag{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-dim); margin-left:5px; }
+  .site-row .flag{ color:var(--danger); font-size:10px; margin-left:4px; }
+
+  .manifest-wrap{ flex:1 1 60%; min-height:0; display:flex; flex-direction:column; }
+  .manifest-head{ padding:12px 16px 8px 16px; display:flex; justify-content:space-between; align-items:center; }
+  .manifest-head h2{ font-family:'Oswald',sans-serif; font-size:13px; text-transform:uppercase; letter-spacing:0.06em; margin:0; color:var(--text-primary); }
+  .manifest-head .count{ font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-muted); }
+  .manifest{ flex:1; overflow-y:auto; padding:0 12px 12px 12px; }
+  .stub{ display:flex; gap:12px; padding:10px 4px; border-bottom:1px dashed var(--hairline); cursor:pointer; }
+  .stub:last-child{ border-bottom:none; }
+  .stub:hover .name{ color:var(--amber); }
+  .stub .tagnum{ font-family:'IBM Plex Mono',monospace; font-size:15px; font-weight:600; color:var(--ink); background:var(--amber); width:26px;height:26px; border-radius:5px; display:flex;align-items:center;justify-content:center; flex-shrink:0; }
+  .stub.start .tagnum{ background:var(--teal); }
+  .stub .body{ flex:1; min-width:0; }
+  .stub .name{ font-size:12.5px; font-weight:500; line-height:1.3; color:var(--text-primary); }
+  .stub .legline{ font-family:'IBM Plex Mono',monospace; font-size:10.5px; color:var(--text-dim); margin-top:3px; display:flex; gap:10px; }
+  .stub .legline .leg{ color:var(--teal); }
+  .stub .legline .cum{ color:var(--text-muted); }
+  .empty-hint{ padding:30px 16px; color:var(--text-dim); font-size:12.5px; line-height:1.5; text-align:center; }
+
+  .summary{ padding:12px 16px; border-top:1px solid var(--hairline); background:var(--panel-raised); flex-shrink:0; }
+  .summary .total{ display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted); margin-bottom:10px; }
+  .summary .total b{ color:var(--amber); font-size:14px; }
+  .gmaps-btn{ display:block; width:100%; text-align:center; background:var(--amber); color:var(--ink); font-weight:700; font-size:13px; padding:10px 0; border-radius:6px; text-decoration:none; letter-spacing:0.02em; }
+  .gmaps-btn:hover{ background:#f2b356; }
+  .gmaps-note{ font-size:10.5px; color:var(--text-dim); margin-top:6px; line-height:1.4; }
+
+  .num-pin{ background:var(--amber); color:var(--ink); border-radius:50%; width:24px;height:24px; display:flex;align-items:center;justify-content:center; font-family:'IBM Plex Mono',monospace; font-weight:700; font-size:12px; border:2px solid var(--ink); box-shadow:0 1px 4px rgba(0,0,0,0.5); }
+  .num-pin.start{ background:var(--teal); }
+  .num-pin.unrouted{ background:var(--text-dim); width:9px;height:9px; border:none; }
+  .gps-dot{ width:16px;height:16px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 0 0 4px rgba(66,133,244,0.35),0 1px 4px rgba(0,0,0,0.4); }
+
+  /* ---------- Leaflet popup buttons ---------- */
+  .leaflet-popup-content-wrapper{ background:var(--panel-raised); color:var(--text-primary); border-radius:8px; }
+  .leaflet-popup-tip{ background:var(--panel-raised); }
+  .popup-card{ font-family:'Inter',sans-serif; min-width:190px; }
+  .popup-card .pname{ font-size:12.5px; font-weight:600; margin-bottom:8px; line-height:1.3; }
+  .popup-card .prow{ display:flex; gap:6px; }
+  .popup-card button{
+    flex:1; background:var(--amber); color:var(--ink); border:none; border-radius:5px;
+    font-size:11px; font-weight:700; padding:7px 4px; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .popup-card button.secondary{ background:var(--panel); color:var(--text-primary); border:1px solid var(--hairline); }
+  .popup-card button:hover{ filter:brightness(1.08); }
+
+  /* ---------- Route summary toast ---------- */
+  .route-toast{
+    position:absolute; bottom:18px; left:50%; transform:translateX(-50%);
+    background:var(--panel-raised); border:1px solid var(--hairline); border-radius:10px;
+    padding:12px 18px; display:flex; align-items:center; gap:16px; z-index:900;
+    box-shadow:0 4px 18px rgba(0,0,0,0.4);
+  }
+  .route-toast.hidden{ display:none; }
+  .route-toast .rt-name{ font-size:12.5px; font-weight:600; color:var(--text-primary); }
+  .route-toast .rt-stats{ font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--teal); display:flex; gap:12px; }
+  .route-toast a.rt-nav{
+    background:var(--amber); color:var(--ink); font-weight:700; font-size:11.5px;
+    padding:7px 12px; border-radius:6px; text-decoration:none; white-space:nowrap;
+  }
+  .route-toast .rt-close{ background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:16px; padding:0 4px; }
+
+  /* ---------- Street View modal ---------- */
+  .sv-modal{ position:absolute; inset:0; background:rgba(6,8,11,0.88); z-index:1100; display:flex; align-items:center; justify-content:center; }
+  .sv-modal.hidden{ display:none; }
+  .sv-box{ width:80%; height:75%; background:var(--panel); border:1px solid var(--hairline); border-radius:10px; overflow:hidden; display:flex; flex-direction:column; }
+  .sv-head{ display:flex; justify-content:space-between; align-items:center; padding:10px 14px; border-bottom:1px solid var(--hairline); flex-shrink:0; }
+  .sv-head .sv-title{ font-family:'Oswald',sans-serif; font-size:13px; text-transform:uppercase; }
+  .sv-head button{ background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; }
+  .sv-box iframe{ flex:1; border:none; width:100%; }
+
+  /* ---------- GPS button ---------- */
+  .locate-btn.active{ color:#4285F4; border-color:#4285F4; }
+
+  /* ---------- Settings overlay ---------- */
+  .overlay{ position:absolute; inset:0; background:rgba(10,12,16,0.85); display:flex; align-items:center; justify-content:center; z-index:1000; }
+  .overlay.hidden{ display:none; }
+  .settings-card{ width:420px; background:var(--panel); border:1px solid var(--hairline); border-radius:10px; padding:24px; }
+  .settings-card h2{ font-family:'Oswald',sans-serif; font-size:16px; text-transform:uppercase; margin:0 0 4px 0; }
+  .settings-card .desc{ font-size:12px; color:var(--text-muted); line-height:1.5; margin-bottom:18px; }
+  .settings-card .field{ margin-bottom:12px; }
+  .settings-card .hint{ font-size:10.5px; color:var(--text-dim); margin-top:4px; line-height:1.4; }
+  .settings-card .save-btn{ width:100%; margin-top:8px; background:var(--amber); color:var(--ink); border:none; font-weight:700; font-size:13px; padding:10px 0; border-radius:6px; cursor:pointer; }
+  .settings-card .err{ color:var(--danger); font-size:11.5px; margin-top:8px; display:none; }
+  .status-line{ display:flex; align-items:center; gap:8px; padding:40px; color:var(--text-muted); font-family:'IBM Plex Mono',monospace; font-size:12px; }
+  .dot{ width:8px;height:8px;border-radius:50%;background:var(--teal); animation:pulse 1.2s infinite; }
+  @keyframes pulse{ 50%{opacity:0.3;} }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span class="tag">MANIFEST</span>
+    <div>
+      <h1>Site Visit Route Planner</h1>
+      <div class="sub">Dubai &amp; Sharjah &middot; Field Manager Dispatch</div>
+    </div>
+  </div>
+  <div class="meta">
+    <div class="stat" id="headerMeta">connecting…</div>
+    <div class="icon-btn locate-btn" id="locateBtn" title="Find my GPS location">📍</div>
+    <div class="icon-btn" id="refreshBtn" title="Reload data from Supabase">⟳</div>
+  </div>
+</header>
+
+<div class="layout">
+  <div class="sidebar">
+    <div class="controls">
+      <div class="field">
+        <label>Manager</label>
+        <select id="managerSelect"></select>
+      </div>
+      <div class="field">
+        <label>Emirate</label>
+        <div class="chip-row" id="emirateChips"></div>
+      </div>
+      <div class="field">
+        <label>Start point</label>
+        <select id="startSelect"></select>
+      </div>
+    </div>
+
+    <div class="list-wrap">
+      <div class="list-head">
+        <span>Today's sites</span>
+        <span class="select-actions">
+          <button id="selAll">select all shown</button>
+          <button id="selNone">clear</button>
+        </span>
+      </div>
+      <div class="search-box"><input type="text" id="searchBox" placeholder="Search site name…"></div>
+      <div class="checklist" id="checklist"><div class="status-line"><div class="dot"></div>Loading sites…</div></div>
+    </div>
+
+    <div class="manifest-wrap">
+      <div class="manifest-head">
+        <h2>Optimized run order</h2>
+        <span class="count" id="manifestCount"></span>
+      </div>
+      <div class="manifest" id="manifest">
+        <div class="empty-hint">Tick sites on the left, pick a start point, and the shortest visiting order will build here automatically.</div>
+      </div>
+      <div class="summary">
+        <div class="total"><span>Straight-line total</span><b id="totalDist">— km</b></div>
+        <a href="#" target="_blank" class="gmaps-btn" id="openGmaps">Open Route in Google Maps</a>
+        <div class="gmaps-note">Order is optimized by straight-line distance (nearest-stop-next). Google Maps will route actual roads; for runs over 9 stops it may split into legs — the manifest above is your master sequence.</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="map"></div>
+
+  <div class="route-toast hidden" id="routeToast">
+    <div>
+      <div class="rt-name" id="rtName">—</div>
+      <div class="rt-stats"><span id="rtDist">— km</span><span id="rtDur">— min</span></div>
+    </div>
+    <a href="#" target="_blank" class="rt-nav" id="rtNav">Navigate</a>
+    <button class="rt-close" id="rtClose">✕</button>
+  </div>
+
+  <div class="sv-modal hidden" id="svModal">
+    <div class="sv-box">
+      <div class="sv-head">
+        <span class="sv-title" id="svTitle">Street View</span>
+        <button id="svClose">✕</button>
+      </div>
+      <iframe id="svFrame" src="" referrerpolicy="no-referrer-when-downgrade"></iframe>
+    </div>
+  </div>
+
+  <div class="overlay hidden" id="settingsOverlay">
+    <div class="settings-card">
+      <h2>Connection problem</h2>
+      <div class="desc">This app connects using the <code>SUPABASE_URL</code> and <code>SUPABASE_ANON_KEY</code> constants near the top of the file's script — no login prompt needed. If you're seeing this, either they haven't been filled in yet, or the connection failed.</div>
+      <div class="err" id="cfgErr" style="display:block;"></div>
+      <button class="save-btn" id="cfgRetry">Retry connection</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+let SITES = [];
+
+// ====================================================================
+// SUPABASE CONNECTION — edit these two lines, then save the file.
+// Find both under Supabase → Project Settings → API.
+//   SUPABASE_URL      -> "Project URL"          e.g. "https://abcdxyz.supabase.co"
+//   SUPABASE_ANON_KEY -> "anon" "public" key     (safe to embed — read-only via RLS)
+// ====================================================================
+const SUPABASE_URL = "https://ducesvnllghmswccrzgm.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_IrPbvI35WItM5uR5Vv3IRw_-xBDiGQk";
+
+let cfg = { url: SUPABASE_URL.replace(/\/$/, ''), key: SUPABASE_ANON_KEY };
+
+let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '' };
+
+const map = L.map('map', { zoomControl: true }).setView([25.2, 55.2], 10);
+
+const roadLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 20
+});
+const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+  attribution: 'Tiles &copy; Esri', maxZoom: 20
+});
+
+roadLayer.addTo(map);
+L.control.layers({ 'Road': roadLayer, 'Satellite': satelliteLayer }, {}, { position: 'topright', collapsed: false }).addTo(map);
+
+let markerLayer = L.layerGroup().addTo(map);
+let routeLine = null;
+let gpsMarker = null;
+let gpsPos = null; // { lat, lng }
+
+function haversine(a, b){
+  const R = 6371;
+  const dLat = (b.lat - a.lat) * Math.PI/180;
+  const dLng = (b.lng - a.lng) * Math.PI/180;
+  const la1 = a.lat * Math.PI/180, la2 = b.lat * Math.PI/180;
+  const h = Math.sin(dLat/2)**2 + Math.cos(la1)*Math.cos(la2)*Math.sin(dLng/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+async function fetchSites(){
+  const res = await fetch(`${cfg.url}/rest/v1/sites?select=*&order=site_name.asc`, {
+    headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` }
+  });
+  if(!res.ok){ throw new Error(`Supabase error ${res.status}: ${await res.text()}`); }
+  const rows = await res.json();
+  return rows.map(r => ({
+    id: r.id,
+    name: r.site_name,
+    emirate: (r.emirate || '').toUpperCase(),
+    link: r.google_map,
+    lat: r.latitude,
+    lng: r.longitude,
+    manager: r.manager,
+    valid: r.latitude !== null && r.longitude !== null
+  }));
+}
+
+function managers(){ return [...new Set(SITES.map(s => s.manager))].sort(); }
+function sitesForManager(m){ return SITES.filter(s => s.manager === m); }
+function visibleSites(){
+  let list = sitesForManager(state.manager);
+  if(state.emirate !== 'ALL') list = list.filter(s => s.emirate === state.emirate);
+  if(state.search) list = list.filter(s => s.name.toLowerCase().includes(state.search.toLowerCase()));
+  return list;
+}
+
+function initControls(){
+  const mgrSel = document.getElementById('managerSelect');
+  mgrSel.innerHTML = '';
+  managers().forEach(m => {
+    const o = document.createElement('option'); o.value = m; o.textContent = m; mgrSel.appendChild(o);
+  });
+  state.manager = managers()[0];
+  mgrSel.value = state.manager;
+  mgrSel.onchange = () => { state.manager = mgrSel.value; state.checked = new Set(); refreshAll(); };
+
+  const chipRow = document.getElementById('emirateChips');
+  chipRow.innerHTML = '';
+  ['ALL','DUBAI','SHARJAH'].forEach(e => {
+    const c = document.createElement('div');
+    c.className = 'chip' + (e === 'ALL' ? ' active' : '');
+    c.textContent = e === 'ALL' ? 'All' : e.charAt(0) + e.slice(1).toLowerCase();
+    c.onclick = () => {
+      document.querySelectorAll('.chip').forEach(x => x.classList.remove('active'));
+      c.classList.add('active'); state.emirate = e; refreshChecklist();
+    };
+    chipRow.appendChild(c);
+  });
+
+  document.getElementById('searchBox').oninput = (e) => { state.search = e.target.value; refreshChecklist(); };
+  document.getElementById('selAll').onclick = () => { visibleSites().forEach(s => { if(s.valid) state.checked.add(s.id); }); refreshChecklist(); computeRoute(); };
+  document.getElementById('selNone').onclick = () => { state.checked.clear(); refreshChecklist(); computeRoute(); };
+  document.getElementById('startSelect').onchange = (e) => {
+    state.start = e.target.value === 'gps' ? 'gps' : parseInt(e.target.value);
+    computeRoute();
+  };
+  document.getElementById('refreshBtn').onclick = () => loadAndRender();
+  document.getElementById('locateBtn').onclick = () => locateMe(true);
+  document.getElementById('rtClose').onclick = () => hideRouteToast();
+  document.getElementById('svClose').onclick = () => hideStreetView();
+}
+
+function refreshStartOptions(){
+  const sel = document.getElementById('startSelect');
+  sel.innerHTML = '';
+  const gpsOpt = document.createElement('option');
+  gpsOpt.value = 'gps';
+  gpsOpt.textContent = '📍 My Current Location (GPS)';
+  sel.appendChild(gpsOpt);
+  const list = sitesForManager(state.manager).filter(s => s.valid);
+  list.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
+  const hq = list.find(s => s.name.toUpperCase().includes('HEAD OFFICE'));
+  state.start = hq ? hq.id : (list[0] ? list[0].id : null);
+  if(state.start) sel.value = state.start;
+}
+
+function refreshChecklist(){
+  const wrap = document.getElementById('checklist');
+  wrap.innerHTML = '';
+  visibleSites().forEach(s => {
+    const row = document.createElement('label');
+    row.className = 'site-row';
+    row.innerHTML = `
+      <input type="checkbox" ${state.checked.has(s.id) ? 'checked' : ''} ${!s.valid ? 'disabled' : ''} data-id="${s.id}">
+      <div class="name">${s.name}<span class="emirate-tag">${s.emirate}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>`;
+    row.querySelector('input').onchange = (e) => {
+      if(e.target.checked) state.checked.add(s.id); else state.checked.delete(s.id);
+      computeRoute();
+    };
+    wrap.appendChild(row);
+  });
+  if(visibleSites().length === 0){
+    wrap.innerHTML = '<div class="empty-hint">No sites match this filter.</div>';
+  }
+}
+
+function popupHtml(s){
+  return `<div class="popup-card">
+    <div class="pname">${s.name}</div>
+    <div class="prow">
+      <button onclick="window.routeFromGPS(${s.id})">🧭 Route</button>
+      <button class="secondary" onclick="window.showStreetView(${s.id})">👁 Street View</button>
+    </div>
+  </div>`;
+}
+
+function computeRoute(){
+  const chosen = sitesForManager(state.manager).filter(s => state.checked.has(s.id) && s.valid);
+  const manifestEl = document.getElementById('manifest');
+  const countEl = document.getElementById('manifestCount');
+  markerLayer.clearLayers();
+  if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+
+  visibleSites().forEach(s => {
+    if(!s.valid || state.checked.has(s.id)) return;
+    const icon = L.divIcon({ className: '', html: `<div class="num-pin unrouted"></div>`, iconSize:[9,9] });
+    L.marker([s.lat, s.lng], { icon }).bindPopup(popupHtml(s)).bindTooltip(s.name).addTo(markerLayer);
+  });
+
+  if(chosen.length === 0){
+    manifestEl.innerHTML = '<div class="empty-hint">Tick sites on the left, pick a start point, and the shortest visiting order will build here automatically.</div>';
+    countEl.textContent = '';
+    document.getElementById('totalDist').textContent = '— km';
+    document.getElementById('openGmaps').href = '#';
+    return;
+  }
+
+  // GPS as start point
+  if(state.start === 'gps'){
+    if(!gpsPos){
+      manifestEl.innerHTML = '<div class="empty-hint">Locating you… allow location access when prompted.</div>';
+      locateMe(false).then(() => computeRoute()).catch(() => {
+        manifestEl.innerHTML = '<div class="empty-hint">Couldn\'t get your GPS location. Allow location access, or pick a fixed start point instead.</div>';
+      });
+      return;
+    }
+  }
+  const startSite = state.start === 'gps'
+    ? { id: 'gps', name: 'My Current Location', lat: gpsPos.lat, lng: gpsPos.lng }
+    : (SITES.find(s => s.id === state.start && s.valid) || chosen[0]);
+  let pool = chosen.filter(s => s.id !== startSite.id);
+  let route = [];
+  let current = startSite;
+  while(pool.length){
+    let bestIdx = 0, bestDist = Infinity;
+    pool.forEach((s, idx) => { const d = haversine(current, s); if(d < bestDist){ bestDist = d; bestIdx = idx; } });
+    route.push({ site: pool[bestIdx], leg: bestDist });
+    current = pool[bestIdx];
+    pool.splice(bestIdx, 1);
+  }
+
+  manifestEl.innerHTML = '';
+  countEl.textContent = `${route.length + 1} stops`;
+  let cum = 0;
+  const startStub = document.createElement('div');
+  startStub.className = 'stub start';
+  startStub.innerHTML = `<div class="tagnum">S</div><div class="body"><div class="name">${startSite.name}</div><div class="legline"><span class="cum">0.0 km</span></div></div>`;
+  startStub.onclick = () => focusSite(startSite);
+  manifestEl.appendChild(startStub);
+
+  const latlngs = [[startSite.lat, startSite.lng]];
+  route.forEach((r, i) => {
+    cum += r.leg;
+    latlngs.push([r.site.lat, r.site.lng]);
+    const stub = document.createElement('div');
+    stub.className = 'stub';
+    stub.innerHTML = `<div class="tagnum">${i+1}</div><div class="body"><div class="name">${r.site.name}</div><div class="legline"><span class="leg">+${r.leg.toFixed(1)} km</span><span class="cum">${cum.toFixed(1)} km total</span></div></div>`;
+    stub.onclick = () => focusSite(r.site);
+    manifestEl.appendChild(stub);
+  });
+
+  document.getElementById('totalDist').textContent = cum.toFixed(1) + ' km';
+
+  const startIcon = L.divIcon({ className:'', html:`<div class="num-pin start">S</div>`, iconSize:[24,24] });
+  const startMarker = L.marker([startSite.lat, startSite.lng], { icon: startIcon }).bindTooltip(startSite.name).addTo(markerLayer);
+  if(startSite.id !== 'gps') startMarker.bindPopup(popupHtml(startSite));
+  route.forEach((r, i) => {
+    const icon = L.divIcon({ className:'', html:`<div class="num-pin">${i+1}</div>`, iconSize:[24,24] });
+    L.marker([r.site.lat, r.site.lng], { icon }).bindPopup(popupHtml(r.site)).bindTooltip(r.site.name).addTo(markerLayer);
+  });
+
+  routeLine = L.polyline(latlngs, { color:'#e8a33d', weight:2.5, opacity:0.8, dashArray:'1,6' }).addTo(map);
+  map.fitBounds(routeLine.getBounds(), { padding:[40,40] });
+
+  const stops = [startSite, ...route.map(r => r.site)];
+  if(startSite.id === 'gps'){
+    // Let Google Maps use the device's live location as the origin
+    const dests = route.map(r => `${r.site.lat},${r.site.lng}`).join('/');
+    document.getElementById('openGmaps').href = `https://www.google.com/maps/dir/Current+Location/${dests}`;
+  } else {
+    document.getElementById('openGmaps').href = `https://www.google.com/maps/dir/${stops.map(s => `${s.lat},${s.lng}`).join('/')}`;
+  }
+}
+
+function focusSite(s){ map.setView([s.lat, s.lng], 15, { animate:true }); }
+function refreshAll(){ refreshStartOptions(); refreshChecklist(); computeRoute(); }
+
+// ---------- GPS ----------
+function locateMe(recenter){
+  return new Promise((resolve, reject) => {
+    if(!navigator.geolocation){ reject(new Error('Geolocation not supported')); return; }
+    document.getElementById('locateBtn').classList.add('active');
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        gpsPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        if(gpsMarker) map.removeLayer(gpsMarker);
+        gpsMarker = L.marker([gpsPos.lat, gpsPos.lng], {
+          icon: L.divIcon({ className:'', html:'<div class="gps-dot"></div>', iconSize:[16,16] })
+        }).bindTooltip('You are here').addTo(map);
+        if(recenter) map.setView([gpsPos.lat, gpsPos.lng], 14, { animate:true });
+        resolve(gpsPos);
+      },
+      (err) => { document.getElementById('locateBtn').classList.remove('active'); reject(err); },
+      { enableHighAccuracy:true, timeout:10000 }
+    );
+  });
+}
+
+// ---------- Single-site road route from GPS (OSRM, no API key) ----------
+async function routeFromGPSImpl(siteId){
+  const site = SITES.find(s => s.id === siteId);
+  if(!site) return;
+  try{
+    if(!gpsPos) await locateMe(false);
+  }catch(e){
+    alert('Could not get your GPS location. Please allow location access and try again.');
+    return;
+  }
+  map.closePopup();
+  document.getElementById('rtName').textContent = `Routing to ${site.name}…`;
+  document.getElementById('rtDist').textContent = '—';
+  document.getElementById('rtDur').textContent = '—';
+  document.getElementById('routeToast').classList.remove('hidden');
+
+  try{
+    const url = `https://router.project-osrm.org/route/v1/driving/${gpsPos.lng},${gpsPos.lat};${site.lng},${site.lat}?overview=full&geometries=geojson`;
+    const res = await fetch(url);
+    const data = await res.json();
+    if(!data.routes || !data.routes.length) throw new Error('No route found');
+    const r = data.routes[0];
+    const coords = r.geometry.coordinates.map(c => [c[1], c[0]]);
+
+    if(routeLine) map.removeLayer(routeLine);
+    routeLine = L.polyline(coords, { color:'#4285F4', weight:5, opacity:0.85 }).addTo(map);
+    map.fitBounds(routeLine.getBounds(), { padding:[60,60] });
+
+    const km = (r.distance / 1000).toFixed(1);
+    const mins = Math.round(r.duration / 60);
+    document.getElementById('rtName').textContent = site.name;
+    document.getElementById('rtDist').textContent = `${km} km`;
+    document.getElementById('rtDur').textContent = `~${mins} min`;
+    document.getElementById('rtNav').href = `https://www.google.com/maps/dir/?api=1&origin=${gpsPos.lat},${gpsPos.lng}&destination=${site.lat},${site.lng}&travelmode=driving`;
+  }catch(e){
+    document.getElementById('rtName').textContent = `Couldn't calculate route: ${e.message}`;
+    document.getElementById('rtDist').textContent = '';
+    document.getElementById('rtDur').textContent = '';
+  }
+}
+function hideRouteToast(){ document.getElementById('routeToast').classList.add('hidden'); }
+window.routeFromGPS = routeFromGPSImpl;
+
+// ---------- Street View (no API key, uses Google's public embed endpoint) ----------
+window.showStreetView = function(siteId){
+  const site = SITES.find(s => s.id === siteId);
+  if(!site) return;
+  document.getElementById('svTitle').textContent = site.name;
+  document.getElementById('svFrame').src = `https://www.google.com/maps?layer=c&cbll=${site.lat},${site.lng}&output=svembed`;
+  document.getElementById('svModal').classList.remove('hidden');
+  map.closePopup();
+};
+function hideStreetView(){
+  document.getElementById('svModal').classList.add('hidden');
+  document.getElementById('svFrame').src = '';
+}
+
+function showConnectionError(message){
+  document.getElementById('cfgErr').textContent = message;
+  document.getElementById('settingsOverlay').classList.remove('hidden');
+}
+function hideConnectionError(){ document.getElementById('settingsOverlay').classList.add('hidden'); }
+
+document.getElementById('cfgRetry').onclick = () => loadAndRender();
+
+async function loadAndRender(){
+  const headerMeta = document.getElementById('headerMeta');
+  const checklist = document.getElementById('checklist');
+  headerMeta.textContent = 'loading…';
+  checklist.innerHTML = '<div class="status-line"><div class="dot"></div>Loading sites…</div>';
+
+  if(SUPABASE_URL.includes('YOUR-PROJECT-REF') || SUPABASE_ANON_KEY.includes('YOUR-ANON-PUBLIC-KEY')){
+    headerMeta.textContent = 'not configured';
+    showConnectionError('SUPABASE_URL / SUPABASE_ANON_KEY are still placeholders. Open this file, find the "SUPABASE CONNECTION" block near the top of the script, and paste in your real Project URL and anon key.');
+    return;
+  }
+
+  try{
+    SITES = await fetchSites();
+    hideConnectionError();
+    headerMeta.textContent = `${SITES.length} sites · ${managers().length} manager(s)`;
+    state.checked = new Set();
+    initControls();
+    refreshStartOptions();
+    refreshChecklist();
+    computeRoute();
+  }catch(e){
+    headerMeta.textContent = 'connection error';
+    checklist.innerHTML = `<div class="empty-hint">Could not load data: ${e.message}</div>`;
+    showConnectionError('Could not load data: ' + e.message + '. Check the URL, key, and that the sites table + read policy from 01_create_table.sql exist.');
+  }
+}
+
+loadAndRender();
+</script>
+</body>
+</html>
