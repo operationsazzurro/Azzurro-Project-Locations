@@ -406,11 +406,11 @@
         <div class="manage-pane" id="paneBulk">
           <div class="field">
             <label>Paste CSV</label>
-            <textarea class="bulk-textarea" id="bulkText" placeholder="site_name,emirate,latitude,longitude,manager
-GENAVCO Dubai,DUBAI,25.2324,55.3699,Rahul"></textarea>
+            <textarea class="bulk-textarea" id="bulkText" placeholder="site_name,emirate,google_map,latitude,longitude,manager
+GENAVCO Dubai,DUBAI,https://maps.app.goo.gl/xxxx,25.2324,55.3699,Rahul"></textarea>
           </div>
           <div class="bulk-hint">
-            Header row optional. Columns in order: <code>site_name, emirate, latitude, longitude, manager</code> (latitude/longitude may be left blank). Or upload a file instead:
+            Header row optional. Columns in order: <code>site_name, emirate, google_map, latitude, longitude, manager</code> (google_map link and latitude/longitude may be left blank). Or upload a file instead:
           </div>
           <div class="file-row">
             <input type="file" id="bulkFile" accept=".csv,text/csv">
@@ -738,9 +738,10 @@ function parseBulkInput(){
   return rows.map(cols => ({
     site_name: (cols[0] || '').trim(),
     emirate: (cols[1] || '').trim().toUpperCase(),
-    latitude: (cols[2] || '').trim(),
-    longitude: (cols[3] || '').trim(),
-    manager: (cols[4] || '').trim()
+    google_map: (cols[2] || '').trim(),
+    latitude: (cols[3] || '').trim(),
+    longitude: (cols[4] || '').trim(),
+    manager: (cols[5] || '').trim()
   }));
 }
 
@@ -763,14 +764,14 @@ function renderBulkPreview(rows){
       if(isNaN(lat) || isNaN(lng)) errors.push('bad coordinates');
     }
     const ok = errors.length === 0;
-    if(ok){ validCount++; parsedBulkRows.push({ site_name:r.site_name, emirate:r.emirate, manager:r.manager, latitude: isNaN(lat)?null:lat, longitude: isNaN(lng)?null:lng, google_map:null }); }
-    return `<tr class="${ok?'':'row-err'}"><td>${r.site_name||'—'}</td><td>${r.emirate||'—'}</td><td>${r.latitude||'—'}</td><td>${r.longitude||'—'}</td><td>${r.manager||'—'}</td><td>${ok?'OK':errors.join(', ')}</td></tr>`;
+    if(ok){ validCount++; parsedBulkRows.push({ site_name:r.site_name, emirate:r.emirate, manager:r.manager, latitude: isNaN(lat)?null:lat, longitude: isNaN(lng)?null:lng, google_map: r.google_map || null }); }
+    return `<tr class="${ok?'':'row-err'}"><td>${r.site_name||'—'}</td><td>${r.emirate||'—'}</td><td>${r.google_map||'—'}</td><td>${r.latitude||'—'}</td><td>${r.longitude||'—'}</td><td>${r.manager||'—'}</td><td>${ok?'OK':errors.join(', ')}</td></tr>`;
   }).join('');
 
   area.innerHTML = `
     <div class="preview-table-wrap">
       <table class="preview-table">
-        <thead><tr><th>Site</th><th>Emirate</th><th>Lat</th><th>Lng</th><th>Manager</th><th>Status</th></tr></thead>
+        <thead><tr><th>Site</th><th>Emirate</th><th>Google Map</th><th>Lat</th><th>Lng</th><th>Manager</th><th>Status</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
     </div>
