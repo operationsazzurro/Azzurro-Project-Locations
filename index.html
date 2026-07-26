@@ -45,6 +45,18 @@
   .select-actions{ display:flex; gap:8px; font-size:11px; }
   .select-actions button{ background:none;border:none;color:var(--teal);cursor:pointer; font-family:'IBM Plex Mono',monospace;font-size:11px;padding:0; text-decoration:underline; text-underline-offset:2px; }
 
+  .custom-loc-panel{ margin-top:9px; padding:10px; background:var(--panel-raised); border:1px solid var(--hairline); border-radius:6px; }
+  .custom-loc-panel.hidden{ display:none; }
+  .clp-row{ display:flex; gap:6px; margin-bottom:6px; }
+  .clp-row:last-of-type{ margin-bottom:0; }
+  .clp-row input{ flex:1; padding:6px 8px; font-size:12px; }
+  .clp-row button{ background:var(--amber); color:var(--ink); border:none; border-radius:5px; padding:0 12px; font-size:11.5px; font-weight:700; cursor:pointer; white-space:nowrap; }
+  .clp-row button:hover{ filter:brightness(1.08); }
+  .clp-or{ font-size:10px; color:var(--text-dim); text-align:center; margin:2px 0 8px 0; text-transform:uppercase; letter-spacing:0.05em; }
+  .clp-status{ font-size:11px; margin-top:8px; color:var(--text-muted); line-height:1.4; }
+  .clp-status.ok{ color:var(--teal); }
+  .clp-status.err{ color:var(--danger); }
+
   .list-wrap{ flex:1 1 40%; min-height:0; display:flex; flex-direction:column; border-bottom:1px solid var(--hairline); }
   .list-head{ padding:10px 16px 6px 16px; font-size:10.5px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); font-weight:600; display:flex; justify-content:space-between; }
   .search-box{ padding:0 16px 8px 16px; }
@@ -261,6 +273,19 @@
       <div class="field">
         <label>Start point</label>
         <select id="startSelect"></select>
+        <div class="custom-loc-panel hidden" id="customLocPanel">
+          <div class="clp-row">
+            <input type="text" id="clpAddress" placeholder="Search address, area, or landmark…">
+            <button id="clpSearchBtn">Find</button>
+          </div>
+          <div class="clp-or">or enter coordinates directly</div>
+          <div class="clp-row">
+            <input type="text" id="clpLat" placeholder="Latitude">
+            <input type="text" id="clpLng" placeholder="Longitude">
+            <button id="clpSetBtn">Set</button>
+          </div>
+          <div class="clp-status" id="clpStatus"></div>
+        </div>
       </div>
     </div>
 
@@ -418,7 +443,7 @@ let cfg = { url: SUPABASE_URL.replace(/\/$/, ''), key: SUPABASE_ANON_KEY };
 let adminSession = null; // { access_token, refresh_token, expires_at, email }
 let pendingAdminAction = null; // function to run right after a successful sign-in
 
-let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '' };
+let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '', customStart: null };
 
 const map = L.map('map', { zoomControl: true }).setView([25.2, 55.2], 10);
 
@@ -792,9 +817,15 @@ function initControls(){
   document.getElementById('selAll').onclick = () => { visibleSites().forEach(s => { if(s.valid) state.checked.add(s.id); }); refreshChecklist(); computeRoute(); };
   document.getElementById('selNone').onclick = () => { state.checked.clear(); refreshChecklist(); computeRoute(); };
   document.getElementById('startSelect').onchange = (e) => {
-    state.start = e.target.value === 'gps' ? 'gps' : parseInt(e.target.value);
-    computeRoute();
+    const v = e.target.value;
+    state.start = (v === 'gps' || v === 'custom') ? v : parseInt(v);
+    document.getElementById('customLocPanel').classList.toggle('hidden', v !== 'custom');
+    if(v !== 'custom') computeRoute();
+    else if(state.customStart) computeRoute();
   };
+  document.getElementById('clpSearchBtn').onclick = () => geocodeCustomStart();
+  document.getElementById('clpAddress').addEventListener('keydown', (e) => { if(e.key === 'Enter') geocodeCustomStart(); });
+  document.getElementById('clpSetBtn').onclick = () => setCustomStartFromLatLng();
   document.getElementById('refreshBtn').onclick = () => loadAndRender();
   document.getElementById('locateBtn').onclick = () => locateMe(true);
   document.getElementById('rtClose').onclick = () => hideRouteToast();
@@ -855,11 +886,16 @@ function refreshStartOptions(){
   gpsOpt.value = 'gps';
   gpsOpt.textContent = '📍 My Current Location (GPS)';
   sel.appendChild(gpsOpt);
+  const customOpt = document.createElement('option');
+  customOpt.value = 'custom';
+  customOpt.textContent = '🔍 Custom Location…';
+  sel.appendChild(customOpt);
   const list = sitesForManager(state.manager).filter(s => s.valid);
   list.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
   const hq = list.find(s => s.name.toUpperCase().includes('HEAD OFFICE'));
   state.start = hq ? hq.id : (list[0] ? list[0].id : null);
   if(state.start) sel.value = state.start;
+  document.getElementById('customLocPanel').classList.add('hidden');
 }
 
 function refreshChecklist(){
@@ -951,8 +987,18 @@ async function computeRoute(){
       return;
     }
   }
+  // Custom searched/entered location as start point
+  if(state.start === 'custom' && !state.customStart){
+    manifestEl.innerHTML = '<div class="empty-hint">Search an address or enter coordinates above to set your starting point.</div>';
+    countEl.textContent = '';
+    document.getElementById('totalDist').textContent = '— km';
+    document.getElementById('openGmaps').href = '#';
+    return;
+  }
   const startSite = state.start === 'gps'
     ? { id: 'gps', name: 'My Current Location', lat: gpsPos.lat, lng: gpsPos.lng }
+    : state.start === 'custom'
+    ? { id: 'custom', name: state.customStart.label, lat: state.customStart.lat, lng: state.customStart.lng }
     : (SITES.find(s => s.id === state.start && s.valid) || chosen[0]);
   const pool0 = chosen.filter(s => s.id !== startSite.id);
   const allPoints = [startSite, ...pool0]; // index 0 = start
@@ -1022,7 +1068,7 @@ async function computeRoute(){
 
   const startIcon = L.divIcon({ className:'', html:`<div class="num-pin start">S</div>`, iconSize:[24,24] });
   const startMarker = L.marker([startSite.lat, startSite.lng], { icon: startIcon }).bindTooltip(startSite.name).addTo(markerLayer);
-  if(startSite.id !== 'gps') startMarker.bindPopup(popupHtml(startSite));
+  if(startSite.id !== 'gps' && startSite.id !== 'custom') startMarker.bindPopup(popupHtml(startSite));
   route.forEach((r, i) => {
     const icon = L.divIcon({ className:'', html:`<div class="num-pin">${i+1}</div>`, iconSize:[24,24] });
     L.marker([r.site.lat, r.site.lng], { icon }).bindPopup(popupHtml(r.site)).bindTooltip(r.site.name).addTo(markerLayer);
@@ -1050,6 +1096,39 @@ function focusSite(s){
   if(isMobile()) document.getElementById('sidebar').classList.add('collapsed');
 }
 function refreshAll(){ refreshStartOptions(); refreshChecklist(); computeRoute(); }
+
+// ---------- Custom start location (search by address, or enter lat/lng directly) ----------
+async function geocodeCustomStart(){
+  const query = document.getElementById('clpAddress').value.trim();
+  const statusEl = document.getElementById('clpStatus');
+  if(!query){ statusEl.textContent = 'Type an address or place name first.'; statusEl.className = 'clp-status err'; return; }
+  statusEl.textContent = 'Searching…'; statusEl.className = 'clp-status';
+  try{
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=ae&q=${encodeURIComponent(query)}`;
+    const res = await fetch(url, { headers: { 'Accept-Language': 'en' } });
+    const data = await res.json();
+    if(!data.length) throw new Error('No matching location found in the UAE. Try a more specific search, or enter coordinates directly.');
+    const lat = parseFloat(data[0].lat), lng = parseFloat(data[0].lon);
+    applyCustomStart(lat, lng, data[0].display_name);
+  }catch(e){
+    statusEl.textContent = e.message; statusEl.className = 'clp-status err';
+  }
+}
+
+function setCustomStartFromLatLng(){
+  const statusEl = document.getElementById('clpStatus');
+  const lat = parseFloat(document.getElementById('clpLat').value);
+  const lng = parseFloat(document.getElementById('clpLng').value);
+  if(isNaN(lat) || isNaN(lng)){ statusEl.textContent = 'Enter valid numeric latitude and longitude.'; statusEl.className = 'clp-status err'; return; }
+  applyCustomStart(lat, lng, `${lat.toFixed(5)}, ${lng.toFixed(5)}`);
+}
+
+function applyCustomStart(lat, lng, label){
+  state.customStart = { lat, lng, label };
+  const statusEl = document.getElementById('clpStatus');
+  statusEl.textContent = `✓ Set: ${label}`; statusEl.className = 'clp-status ok';
+  computeRoute();
+}
 
 // ---------- GPS ----------
 function locateMe(recenter){
