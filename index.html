@@ -595,15 +595,23 @@ async function supabaseUpdate(id, fields){
     body: JSON.stringify(fields)
   });
   if(!res.ok) throw new Error(await res.text());
-  return res.json();
+  const result = await res.json();
+  if(!Array.isArray(result) || result.length === 0){
+    throw new Error('Update reported success but changed 0 rows. This usually means the UPDATE policy on `sites` is missing a WITH CHECK expression — open Supabase → Authentication → Policies → sites → the UPDATE policy, and make sure BOTH "USING expression" and "WITH CHECK expression" are set to true, not just one of them.');
+  }
+  return result;
 }
 async function supabaseDelete(id){
   const token = await ensureAdminToken();
   const res = await fetch(`${cfg.url}/rest/v1/sites?id=eq.${id}`, {
     method: 'DELETE',
-    headers: { apikey: cfg.key, Authorization: `Bearer ${token}` }
+    headers: { apikey: cfg.key, Authorization: `Bearer ${token}`, Prefer: 'return=representation' }
   });
   if(!res.ok) throw new Error(await res.text());
+  const result = await res.json();
+  if(!Array.isArray(result) || result.length === 0){
+    throw new Error('Delete reported success but removed 0 rows — check the DELETE policy on `sites` has its USING expression set to true.');
+  }
 }
 
 async function reloadSitesOnly(){
