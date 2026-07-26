@@ -55,6 +55,48 @@
   .site-row .name{ font-size:12.5px; line-height:1.35; }
   .site-row .emirate-tag{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-dim); margin-left:5px; }
   .site-row .flag{ color:var(--danger); font-size:10px; margin-left:4px; }
+  .row-edit-btn{
+    background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:13px;
+    padding:4px 6px; flex-shrink:0; border-radius:4px;
+  }
+  .row-edit-btn:hover{ color:var(--amber); background:var(--panel); }
+
+  /* ---------- Manage Sites panel ---------- */
+  .manage-overlay{ position:absolute; inset:0; background:rgba(6,8,11,0.88); z-index:1200; display:flex; align-items:center; justify-content:center; padding:20px; }
+  .manage-overlay.hidden{ display:none; }
+  .manage-card{ width:520px; max-width:100%; max-height:90vh; background:var(--panel); border:1px solid var(--hairline); border-radius:10px; display:flex; flex-direction:column; overflow:hidden; }
+  .manage-head{ display:flex; justify-content:space-between; align-items:center; padding:16px 20px 0 20px; flex-shrink:0; }
+  .manage-head h2{ font-family:'Oswald',sans-serif; font-size:16px; text-transform:uppercase; margin:0; }
+  .manage-head button{ background:none; border:none; color:var(--text-muted); font-size:18px; cursor:pointer; }
+  .manage-tabs{ display:flex; gap:4px; padding:14px 20px 0 20px; flex-shrink:0; }
+  .manage-tab{ padding:8px 14px; font-size:12px; font-weight:600; color:var(--text-muted); cursor:pointer; border-bottom:2px solid transparent; }
+  .manage-tab.active{ color:var(--amber); border-bottom-color:var(--amber); }
+  .manage-body{ padding:16px 20px 20px 20px; overflow-y:auto; flex:1; }
+  .manage-pane{ display:none; }
+  .manage-pane.active{ display:block; }
+  .form-grid{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .form-grid .field.full{ grid-column:1 / -1; }
+  .form-actions{ display:flex; gap:8px; margin-top:16px; }
+  .form-actions button{ flex:1; padding:10px 0; border-radius:6px; font-weight:700; font-size:13px; cursor:pointer; border:none; }
+  .btn-primary{ background:var(--amber); color:var(--ink); }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-danger{ background:transparent; color:var(--danger); border:1px solid var(--danger-dim) !important; }
+  .btn-danger:hover{ background:rgba(226,96,79,0.1); }
+  .form-msg{ font-size:11.5px; margin-top:10px; min-height:14px; }
+  .form-msg.err{ color:var(--danger); }
+  .form-msg.ok{ color:var(--teal); }
+
+  .bulk-textarea{ width:100%; min-height:120px; background:var(--panel-raised); border:1px solid var(--hairline); color:var(--text-primary); border-radius:6px; padding:10px; font-family:'IBM Plex Mono',monospace; font-size:11.5px; resize:vertical; }
+  .bulk-hint{ font-size:10.5px; color:var(--text-dim); margin-top:6px; line-height:1.5; }
+  .bulk-hint code{ background:var(--panel-raised); padding:1px 4px; border-radius:3px; }
+  .file-row{ display:flex; align-items:center; gap:10px; margin-top:10px; }
+  .file-row input[type=file]{ font-size:11.5px; color:var(--text-muted); flex:1; }
+  .preview-table-wrap{ margin-top:14px; max-height:220px; overflow:auto; border:1px solid var(--hairline); border-radius:6px; }
+  table.preview-table{ width:100%; border-collapse:collapse; font-size:11px; font-family:'IBM Plex Mono',monospace; }
+  table.preview-table th{ background:var(--panel-raised); text-align:left; padding:6px 8px; position:sticky; top:0; color:var(--text-dim); text-transform:uppercase; font-size:9.5px; letter-spacing:0.05em; }
+  table.preview-table td{ padding:5px 8px; border-top:1px solid var(--hairline); color:var(--text-muted); }
+  table.preview-table tr.row-err td{ color:var(--danger); }
+  .preview-summary{ font-size:11.5px; color:var(--text-muted); margin-top:8px; }
 
   .manifest-wrap{ flex:1 1 60%; min-height:0; display:flex; flex-direction:column; }
   .manifest-head{ padding:12px 16px 8px 16px; display:flex; justify-content:space-between; align-items:center; }
@@ -194,6 +236,8 @@
   </div>
   <div class="meta">
     <div class="stat" id="headerMeta">connecting…</div>
+    <div class="icon-btn" id="adminBtn" title="Admin sign in">🔒</div>
+    <div class="icon-btn" id="manageBtn" title="Add / edit / bulk import sites">＋</div>
     <div class="icon-btn locate-btn" id="locateBtn" title="Find my GPS location">📍</div>
     <div class="icon-btn" id="refreshBtn" title="Reload data from Supabase">⟳</div>
   </div>
@@ -259,6 +303,93 @@
     <button class="rt-close" id="rtClose">✕</button>
   </div>
 
+  <div class="manage-overlay hidden" id="adminOverlay">
+    <div class="settings-card">
+      <h2>Admin Sign In</h2>
+      <div class="desc">Editing, deleting, and bulk-importing sites requires the admin account. Everyone else can still view the map and plan routes without signing in.</div>
+      <div class="field">
+        <label>Email</label>
+        <input type="text" id="adminEmail" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Password</label>
+        <input type="password" id="adminPassword" autocomplete="current-password">
+      </div>
+      <button class="save-btn" id="adminSignInBtn">Sign In</button>
+      <div class="err" id="adminErr"></div>
+    </div>
+  </div>
+
+  <div class="manage-overlay hidden" id="manageOverlay">
+    <div class="manage-card">
+      <div class="manage-head">
+        <h2 id="manageTitle">Add Site</h2>
+        <button id="manageClose">✕</button>
+      </div>
+      <div class="manage-tabs">
+        <div class="manage-tab active" id="tabSingle">Single Site</div>
+        <div class="manage-tab" id="tabBulk">Bulk Import CSV</div>
+      </div>
+      <div class="manage-body">
+
+        <div class="manage-pane active" id="paneSingle">
+          <input type="hidden" id="editId">
+          <div class="form-grid">
+            <div class="field full">
+              <label>Site name</label>
+              <input type="text" id="fSiteName" placeholder="e.g. GENAVCO Dubai - Umm Ramool">
+            </div>
+            <div class="field">
+              <label>Emirate</label>
+              <input type="text" id="fEmirate" list="emirateList" placeholder="DUBAI">
+              <datalist id="emirateList"></datalist>
+            </div>
+            <div class="field">
+              <label>Manager</label>
+              <input type="text" id="fManager" list="managerList" placeholder="Rahul">
+              <datalist id="managerList"></datalist>
+            </div>
+            <div class="field">
+              <label>Latitude</label>
+              <input type="text" id="fLat" placeholder="25.317292">
+            </div>
+            <div class="field">
+              <label>Longitude</label>
+              <input type="text" id="fLng" placeholder="55.385250">
+            </div>
+            <div class="field full">
+              <label>Google Maps link (optional)</label>
+              <input type="text" id="fLink" placeholder="https://maps.app.goo.gl/...">
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn-primary" id="saveSiteBtn">Save Site</button>
+            <button class="btn-danger" id="deleteSiteBtn" style="display:none;">Delete</button>
+          </div>
+          <div class="form-msg" id="singleMsg"></div>
+        </div>
+
+        <div class="manage-pane" id="paneBulk">
+          <div class="field">
+            <label>Paste CSV</label>
+            <textarea class="bulk-textarea" id="bulkText" placeholder="site_name,emirate,latitude,longitude,manager
+GENAVCO Dubai,DUBAI,25.2324,55.3699,Rahul"></textarea>
+          </div>
+          <div class="bulk-hint">
+            Header row optional. Columns in order: <code>site_name, emirate, latitude, longitude, manager</code> (latitude/longitude may be left blank). Or upload a file instead:
+          </div>
+          <div class="file-row">
+            <input type="file" id="bulkFile" accept=".csv,text/csv">
+          </div>
+          <button class="btn-primary" id="previewBtn" style="margin-top:12px;width:100%;">Preview</button>
+          <div id="previewArea"></div>
+          <div class="form-msg" id="bulkMsg"></div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
   <div class="overlay hidden" id="settingsOverlay">
     <div class="settings-card">
       <h2>Connection problem</h2>
@@ -270,6 +401,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 let SITES = [];
 
@@ -283,6 +415,8 @@ const SUPABASE_URL = "https://ducesvnllghmswccrzgm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_IrPbvI35WItM5uR5Vv3IRw_-xBDiGQk";
 
 let cfg = { url: SUPABASE_URL.replace(/\/$/, ''), key: SUPABASE_ANON_KEY };
+let adminSession = null; // { access_token, refresh_token, expires_at, email }
+let pendingAdminAction = null; // function to run right after a successful sign-in
 
 let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '' };
 
@@ -330,6 +464,276 @@ async function fetchSites(){
   }));
 }
 
+// ---------- Admin auth (Supabase Auth — real login, not a client-side password) ----------
+async function loadAdminSession(){
+  try{
+    const res = await window.storage.get('admin-session');
+    if(res && res.value){
+      const s = JSON.parse(res.value);
+      if(s && s.expires_at) { adminSession = s; return true; }
+    }
+  }catch(e){ /* not signed in */ }
+  return false;
+}
+async function persistAdminSession(){
+  if(adminSession) await window.storage.set('admin-session', JSON.stringify(adminSession));
+  else await window.storage.delete('admin-session').catch(()=>{});
+}
+function isAdminSessionFresh(){
+  return adminSession && adminSession.expires_at && (adminSession.expires_at * 1000) > (Date.now() + 30000);
+}
+async function ensureAdminToken(){
+  if(!adminSession) throw new Error('Not signed in');
+  if(isAdminSessionFresh()) return adminSession.access_token;
+  // refresh
+  const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=refresh_token`, {
+    method: 'POST',
+    headers: { apikey: cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ refresh_token: adminSession.refresh_token })
+  });
+  if(!res.ok){ adminSession = null; await persistAdminSession(); updateAdminUI(); throw new Error('Session expired — please sign in again'); }
+  const data = await res.json();
+  adminSession = { access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at, email: adminSession.email };
+  await persistAdminSession();
+  return adminSession.access_token;
+}
+async function adminSignIn(email, password){
+  const res = await fetch(`${cfg.url}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: cfg.key, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password })
+  });
+  const data = await res.json();
+  if(!res.ok) throw new Error(data.error_description || data.msg || 'Sign-in failed');
+  adminSession = { access_token: data.access_token, refresh_token: data.refresh_token, expires_at: data.expires_at, email };
+  await persistAdminSession();
+  updateAdminUI();
+}
+async function adminSignOut(){
+  adminSession = null;
+  await persistAdminSession();
+  updateAdminUI();
+}
+function updateAdminUI(){
+  const btn = document.getElementById('adminBtn');
+  if(adminSession){ btn.textContent = '🔓'; btn.title = `Signed in as ${adminSession.email} (click to sign out)`; }
+  else{ btn.textContent = '🔒'; btn.title = 'Admin sign in'; }
+}
+
+function requireAdmin(action){
+  if(adminSession){ action(); return; }
+  pendingAdminAction = action;
+  document.getElementById('adminEmail').value = '';
+  document.getElementById('adminPassword').value = '';
+  document.getElementById('adminErr').style.display = 'none';
+  document.getElementById('adminOverlay').classList.remove('hidden');
+}
+
+// ---------- Supabase writes (admin-only) ----------
+async function supabaseInsert(rows){
+  const token = await ensureAdminToken();
+  const res = await fetch(`${cfg.url}/rest/v1/sites`, {
+    method: 'POST',
+    headers: { apikey: cfg.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(rows)
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function supabaseUpdate(id, fields){
+  const token = await ensureAdminToken();
+  const res = await fetch(`${cfg.url}/rest/v1/sites?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: { apikey: cfg.key, Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(fields)
+  });
+  if(!res.ok) throw new Error(await res.text());
+  return res.json();
+}
+async function supabaseDelete(id){
+  const token = await ensureAdminToken();
+  const res = await fetch(`${cfg.url}/rest/v1/sites?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: { apikey: cfg.key, Authorization: `Bearer ${token}` }
+  });
+  if(!res.ok) throw new Error(await res.text());
+}
+
+async function reloadSitesOnly(){
+  SITES = await fetchSites();
+  document.getElementById('headerMeta').textContent = `${SITES.length} sites · ${managers().length} manager(s)`;
+  refreshStartOptions();
+  refreshChecklist();
+  computeRoute();
+}
+
+// ---------- Manage Sites panel ----------
+function populateDatalists(){
+  document.getElementById('managerList').innerHTML = managers().map(m => `<option value="${m}">`).join('');
+  const emirates = [...new Set(SITES.map(s => s.emirate).filter(Boolean))];
+  ['DUBAI','SHARJAH','ABU DHABI','AJMAN','FUJAIRAH','RAS AL KHAIMAH','UMM AL QUWAIN'].forEach(e => { if(!emirates.includes(e)) emirates.push(e); });
+  document.getElementById('emirateList').innerHTML = emirates.map(e => `<option value="${e}">`).join('');
+}
+
+function openManage(mode, site){
+  populateDatalists();
+  document.getElementById('singleMsg').textContent = '';
+  document.getElementById('singleMsg').className = 'form-msg';
+  switchManageTab('single');
+  if(mode === 'edit' && site){
+    document.getElementById('manageTitle').textContent = 'Edit Site';
+    document.getElementById('editId').value = site.id;
+    document.getElementById('fSiteName').value = site.name;
+    document.getElementById('fEmirate').value = site.emirate;
+    document.getElementById('fManager').value = site.manager;
+    document.getElementById('fLat').value = site.lat ?? '';
+    document.getElementById('fLng').value = site.lng ?? '';
+    document.getElementById('fLink').value = site.link || '';
+    document.getElementById('deleteSiteBtn').style.display = 'block';
+  }else{
+    document.getElementById('manageTitle').textContent = 'Add Site';
+    document.getElementById('editId').value = '';
+    document.getElementById('fSiteName').value = '';
+    document.getElementById('fEmirate').value = state.manager && SITES.find(s=>s.manager===state.manager) ? sitesForManager(state.manager)[0]?.emirate || '' : '';
+    document.getElementById('fManager').value = state.manager || '';
+    document.getElementById('fLat').value = '';
+    document.getElementById('fLng').value = '';
+    document.getElementById('fLink').value = '';
+    document.getElementById('deleteSiteBtn').style.display = 'none';
+  }
+  document.getElementById('manageOverlay').classList.remove('hidden');
+}
+function closeManage(){ document.getElementById('manageOverlay').classList.add('hidden'); }
+
+function switchManageTab(tab){
+  document.getElementById('tabSingle').classList.toggle('active', tab === 'single');
+  document.getElementById('tabBulk').classList.toggle('active', tab === 'bulk');
+  document.getElementById('paneSingle').classList.toggle('active', tab === 'single');
+  document.getElementById('paneBulk').classList.toggle('active', tab === 'bulk');
+}
+
+async function saveSite(){
+  const msg = document.getElementById('singleMsg');
+  const id = document.getElementById('editId').value;
+  const name = document.getElementById('fSiteName').value.trim();
+  const emirate = document.getElementById('fEmirate').value.trim().toUpperCase();
+  const manager = document.getElementById('fManager').value.trim();
+  const latRaw = document.getElementById('fLat').value.trim();
+  const lngRaw = document.getElementById('fLng').value.trim();
+  const link = document.getElementById('fLink').value.trim();
+
+  if(!name || !emirate || !manager){
+    msg.textContent = 'Site name, emirate, and manager are required.'; msg.className = 'form-msg err'; return;
+  }
+  let lat = null, lng = null;
+  if(latRaw || lngRaw){
+    lat = parseFloat(latRaw); lng = parseFloat(lngRaw);
+    if(isNaN(lat) || isNaN(lng)){ msg.textContent = 'Latitude/Longitude must both be numbers, or both left blank.'; msg.className = 'form-msg err'; return; }
+  }
+
+  const payload = { site_name: name, emirate, manager, latitude: lat, longitude: lng, google_map: link || null };
+  msg.textContent = 'Saving…'; msg.className = 'form-msg';
+  try{
+    if(id){ await supabaseUpdate(id, payload); }
+    else{ await supabaseInsert([payload]); }
+    msg.textContent = 'Saved.'; msg.className = 'form-msg ok';
+    await reloadSitesOnly();
+    setTimeout(closeManage, 500);
+  }catch(e){
+    msg.textContent = 'Save failed: ' + e.message; msg.className = 'form-msg err';
+  }
+}
+
+async function deleteSiteHandler(){
+  const id = document.getElementById('editId').value;
+  if(!id) return;
+  if(!confirm('Delete this site permanently?')) return;
+  const msg = document.getElementById('singleMsg');
+  try{
+    await supabaseDelete(id);
+    await reloadSitesOnly();
+    closeManage();
+  }catch(e){
+    msg.textContent = 'Delete failed: ' + e.message; msg.className = 'form-msg err';
+  }
+}
+
+// ---------- Bulk import ----------
+let parsedBulkRows = [];
+
+function parseBulkInput(){
+  const text = document.getElementById('bulkText').value.trim();
+  if(!text) return [];
+  const result = Papa.parse(text, { skipEmptyLines: true });
+  let rows = result.data;
+  // Detect + strip a header row
+  const firstRow = rows[0].map(c => (c||'').toString().trim().toLowerCase());
+  if(firstRow.includes('site_name') || firstRow.includes('site name') || firstRow.includes('name')){
+    rows = rows.slice(1);
+  }
+  return rows.map(cols => ({
+    site_name: (cols[0] || '').trim(),
+    emirate: (cols[1] || '').trim().toUpperCase(),
+    latitude: (cols[2] || '').trim(),
+    longitude: (cols[3] || '').trim(),
+    manager: (cols[4] || '').trim()
+  }));
+}
+
+function renderBulkPreview(rows){
+  parsedBulkRows = [];
+  const area = document.getElementById('previewArea');
+  if(rows.length === 0){
+    area.innerHTML = '<div class="empty-hint">No rows found. Paste CSV text or choose a file, then Preview.</div>';
+    return;
+  }
+  let validCount = 0;
+  const tableRows = rows.map(r => {
+    const errors = [];
+    if(!r.site_name) errors.push('missing name');
+    if(!r.emirate) errors.push('missing emirate');
+    if(!r.manager) errors.push('missing manager');
+    let lat = null, lng = null;
+    if(r.latitude || r.longitude){
+      lat = parseFloat(r.latitude); lng = parseFloat(r.longitude);
+      if(isNaN(lat) || isNaN(lng)) errors.push('bad coordinates');
+    }
+    const ok = errors.length === 0;
+    if(ok){ validCount++; parsedBulkRows.push({ site_name:r.site_name, emirate:r.emirate, manager:r.manager, latitude: isNaN(lat)?null:lat, longitude: isNaN(lng)?null:lng, google_map:null }); }
+    return `<tr class="${ok?'':'row-err'}"><td>${r.site_name||'—'}</td><td>${r.emirate||'—'}</td><td>${r.latitude||'—'}</td><td>${r.longitude||'—'}</td><td>${r.manager||'—'}</td><td>${ok?'OK':errors.join(', ')}</td></tr>`;
+  }).join('');
+
+  area.innerHTML = `
+    <div class="preview-table-wrap">
+      <table class="preview-table">
+        <thead><tr><th>Site</th><th>Emirate</th><th>Lat</th><th>Lng</th><th>Manager</th><th>Status</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+    <div class="preview-summary">${validCount} of ${rows.length} rows ready to import${validCount < rows.length ? ' (fix or remove the flagged rows above and re-preview)' : ''}.</div>
+    <button class="btn-primary" id="confirmImportBtn" style="width:100%;margin-top:10px;" ${validCount===0?'disabled':''}>Import ${validCount} Site${validCount===1?'':'s'}</button>
+  `;
+  const btn = document.getElementById('confirmImportBtn');
+  if(btn) btn.onclick = confirmBulkImport;
+}
+
+async function confirmBulkImport(){
+  const msg = document.getElementById('bulkMsg');
+  if(parsedBulkRows.length === 0) return;
+  msg.textContent = `Importing ${parsedBulkRows.length} sites…`; msg.className = 'form-msg';
+  try{
+    await supabaseInsert(parsedBulkRows);
+    msg.textContent = `Imported ${parsedBulkRows.length} sites.`; msg.className = 'form-msg ok';
+    parsedBulkRows = [];
+    document.getElementById('bulkText').value = '';
+    document.getElementById('previewArea').innerHTML = '';
+    await reloadSitesOnly();
+    setTimeout(closeManage, 700);
+  }catch(e){
+    msg.textContent = 'Import failed: ' + e.message; msg.className = 'form-msg err';
+  }
+}
+
 function managers(){ return [...new Set(SITES.map(s => s.manager))].sort(); }
 function sitesForManager(m){ return SITES.filter(s => s.manager === m); }
 function visibleSites(){
@@ -375,6 +779,49 @@ function initControls(){
   document.getElementById('sheetHandle').onclick = () => {
     document.getElementById('sidebar').classList.toggle('collapsed');
   };
+  document.getElementById('manageBtn').onclick = () => requireAdmin(() => openManage('add', null));
+  document.getElementById('adminBtn').onclick = () => {
+    if(adminSession){
+      if(confirm(`Signed in as ${adminSession.email}. Sign out?`)) adminSignOut();
+    }else{
+      requireAdmin(() => {});
+    }
+  };
+  document.getElementById('adminSignInBtn').onclick = async () => {
+    const email = document.getElementById('adminEmail').value.trim();
+    const password = document.getElementById('adminPassword').value;
+    const err = document.getElementById('adminErr');
+    err.style.display = 'none';
+    if(!email || !password){ err.textContent = 'Enter both email and password.'; err.style.display = 'block'; return; }
+    try{
+      await adminSignIn(email, password);
+      document.getElementById('adminOverlay').classList.add('hidden');
+      const action = pendingAdminAction;
+      pendingAdminAction = null;
+      if(action) action();
+    }catch(e){
+      err.textContent = e.message; err.style.display = 'block';
+    }
+  };
+  document.getElementById('manageClose').onclick = () => closeManage();
+  document.getElementById('tabSingle').onclick = () => switchManageTab('single');
+  document.getElementById('tabBulk').onclick = () => switchManageTab('bulk');
+  document.getElementById('saveSiteBtn').onclick = () => saveSite();
+  document.getElementById('deleteSiteBtn').onclick = () => deleteSiteHandler();
+  document.getElementById('previewBtn').onclick = () => renderBulkPreview(parseBulkInput());
+  document.getElementById('bulkFile').onchange = (e) => {
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      document.getElementById('bulkText').value = ev.target.result;
+      renderBulkPreview(parseBulkInput());
+    };
+    reader.readAsText(file);
+  };
+  document.getElementById('adminOverlay').addEventListener('click', (e) => {
+    if(e.target.id === 'adminOverlay'){ e.currentTarget.classList.add('hidden'); pendingAdminAction = null; }
+  });
 }
 
 function isMobile(){ return window.matchMedia('(max-width: 820px)').matches; }
@@ -397,15 +844,19 @@ function refreshChecklist(){
   const wrap = document.getElementById('checklist');
   wrap.innerHTML = '';
   visibleSites().forEach(s => {
-    const row = document.createElement('label');
+    const row = document.createElement('div');
     row.className = 'site-row';
     row.innerHTML = `
-      <input type="checkbox" ${state.checked.has(s.id) ? 'checked' : ''} ${!s.valid ? 'disabled' : ''} data-id="${s.id}">
-      <div class="name">${s.name}<span class="emirate-tag">${s.emirate}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>`;
+      <label style="display:flex;align-items:flex-start;gap:9px;flex:1;min-width:0;cursor:pointer;">
+        <input type="checkbox" ${state.checked.has(s.id) ? 'checked' : ''} ${!s.valid ? 'disabled' : ''} data-id="${s.id}">
+        <div class="name">${s.name}<span class="emirate-tag">${s.emirate}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>
+      </label>
+      <button class="row-edit-btn" title="Edit this site">✎</button>`;
     row.querySelector('input').onchange = (e) => {
       if(e.target.checked) state.checked.add(s.id); else state.checked.delete(s.id);
       computeRoute();
     };
+    row.querySelector('.row-edit-btn').onclick = (e) => { e.stopPropagation(); requireAdmin(() => openManage('edit', s)); };
     wrap.appendChild(row);
   });
   if(visibleSites().length === 0){
@@ -687,6 +1138,10 @@ async function loadAndRender(){
   }
 }
 
+(async function initAdmin(){
+  await loadAdminSession();
+  updateAdminUI();
+})();
 loadAndRender();
 </script>
 </body>
