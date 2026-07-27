@@ -464,7 +464,7 @@ let SITES = [];
 // ====================================================================
 // Google Maps: Google Cloud Console -> APIs & Services -> Credentials
 //   (Enable the "Maps JavaScript API" for the project first)
-const GOOGLE_MAPS_API_KEY = "YOUR-GOOGLE-MAPS-API-KEY";
+const GOOGLE_MAPS_API_KEY = "__GOOGLE_MAPS_KEY__";
 // Supabase: Project Settings -> API
 const SUPABASE_URL = "https://ducesvnllghmswccrzgm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_IrPbvI35WItM5uR5Vv3IRw_-xBDiGQk";
@@ -484,9 +484,9 @@ let infoWindow;
 
 // Load the Google Maps JS API now that we have the key, then boot the rest of the app
 (function loadGoogleMaps(){
-  if(GOOGLE_MAPS_API_KEY.includes('YOUR-GOOGLE-MAPS-API-KEY')){
+  if(GOOGLE_MAPS_API_KEY.includes('__GOOGLE_MAPS_KEY__')){
     document.getElementById('headerMeta').textContent = 'Google Maps key missing';
-    document.getElementById('checklist').innerHTML = '<div class="empty-hint">Open this file, find GOOGLE_MAPS_API_KEY near the top of the script, and paste in a real Google Maps JavaScript API key (Google Cloud Console → Credentials, with the "Maps JavaScript API" enabled).</div>';
+    document.getElementById('checklist').innerHTML = '<div class="empty-hint">Google Maps key not found. If deploying via Render, make sure the build command substitutes __GOOGLE_MAPS_KEY__ with your real key. If running locally, replace __GOOGLE_MAPS_KEY__ near the top of the script with a real Google Maps JavaScript API key (Google Cloud Console → Credentials, with the "Maps JavaScript API" enabled).</div>';
     return;
   }
   const s = document.createElement('script');
