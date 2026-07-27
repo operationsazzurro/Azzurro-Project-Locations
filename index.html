@@ -494,7 +494,7 @@ let infoWindow;
     return;
   }
   const s = document.createElement('script');
-  s.src = `https://maps.googleapis.com/maps/api/js?key=${}&language=en&region=AE&callback=initGoogleMap`;
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&language=en&region=AE&callback=initGoogleMap`;
   s.async = true;
   s.onerror = () => { document.getElementById('map').innerHTML = '<div class="map-error">Google Maps failed to load. Check the API key is valid, "Maps JavaScript API" is enabled, billing is on, and any referrer restriction allows this domain.</div>'; };
   document.head.appendChild(s);
