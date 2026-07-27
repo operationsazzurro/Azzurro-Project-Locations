@@ -489,7 +489,7 @@ let infoWindow;
 // Load the Google Maps JS API now that we have the key (map-only feature —
 // the rest of the app boots independently below, regardless of whether this succeeds)
 (function loadGoogleMaps(){
-  if(GOOGLE_MAPS_API_KEY.includes('__GOOGLE_MAPS_KEY')){
+  if(GOOGLE_MAPS_API_KEY.includes('__GOOGLE_MAPS_KEY__')){
     document.getElementById('map').innerHTML = '<div class="map-error">Google Maps key missing. If deploying via Render, check that the build command actually substitutes __GOOGLE_MAPS_KEY__ with your real key (verify in the build logs). If running locally, replace __GOOGLE_MAPS_KEY__ near the top of the script with a real Google Maps JavaScript API key.</div>';
     return;
   }
