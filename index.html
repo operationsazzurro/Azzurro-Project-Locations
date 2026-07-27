@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>Dispatch — Site Visit Route Planner</title>
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
@@ -139,10 +138,12 @@
   .num-pin.unrouted{ background:var(--text-dim); width:9px;height:9px; border:none; }
   .gps-dot{ width:16px;height:16px;border-radius:50%;background:#4285F4;border:3px solid #fff;box-shadow:0 0 0 4px rgba(66,133,244,0.35),0 1px 4px rgba(0,0,0,0.4); }
 
-  /* ---------- Leaflet popup buttons ---------- */
-  .leaflet-popup-content-wrapper{ background:var(--panel-raised); color:var(--text-primary); border-radius:8px; }
-  .leaflet-popup-tip{ background:var(--panel-raised); }
-  .popup-card{ font-family:'Inter',sans-serif; min-width:190px; }
+  /* ---------- Map marker popup (Google InfoWindow content) ---------- */
+  .popup-card{
+    font-family:'Inter',sans-serif; min-width:190px;
+    background:var(--panel-raised); color:var(--text-primary);
+    padding:10px; border-radius:6px; margin:-8px;
+  }
   .popup-card .pname{ font-size:12.5px; font-weight:600; margin-bottom:8px; line-height:1.3; }
   .popup-card .prow{ display:flex; gap:6px; }
   .popup-card button{
@@ -221,8 +222,6 @@
       flex-wrap:wrap; justify-content:center; text-align:center;
     }
 
-    .leaflet-control-layers{ font-size:12px; }
-    .leaflet-top.leaflet-right{ top:8px; }
   }
 
   @media (max-width: 420px){
@@ -434,17 +433,17 @@ GENAVCO Dubai,DUBAI,https://maps.app.goo.gl/xxxx,25.2324,55.3699,Rahul"></textar
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
 <script>
 let SITES = [];
 
 // ====================================================================
-// SUPABASE CONNECTION — edit these two lines, then save the file.
-// Find both under Supabase → Project Settings → API.
-//   SUPABASE_URL      -> "Project URL"          e.g. "https://abcdxyz.supabase.co"
-//   SUPABASE_ANON_KEY -> "anon" "public" key     (safe to embed — read-only via RLS)
+// CREDENTIALS — edit these, then save the file.
 // ====================================================================
+// Google Maps: Google Cloud Console -> APIs & Services -> Credentials
+//   (Enable the "Maps JavaScript API" for the project first)
+const GOOGLE_MAPS_API_KEY = "__GOOGLE_MAPS_KEY__";
+// Supabase: Project Settings -> API
 const SUPABASE_URL = "https://ducesvnllghmswccrzgm.supabase.co";
 const SUPABASE_ANON_KEY = "sb_publishable_IrPbvI35WItM5uR5Vv3IRw_-xBDiGQk";
 
@@ -454,22 +453,54 @@ let pendingAdminAction = null; // function to run right after a successful sign-
 
 let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '', customStart: null };
 
-const map = L.map('map', { zoomControl: true }).setView([25.2, 55.2], 10);
-
-const roadLayer = L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
-  attribution: '&copy; OpenStreetMap &copy; CARTO', maxZoom: 20
-});
-const satelliteLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-  attribution: 'Tiles &copy; Esri', maxZoom: 20
-});
-
-roadLayer.addTo(map);
-L.control.layers({ 'Road': roadLayer, 'Satellite': satelliteLayer }, {}, { position: 'topright', collapsed: false }).addTo(map);
-
-let markerLayer = L.layerGroup().addTo(map);
-let routeLine = null;
+let map; // assigned once the Google Maps API finishes loading, see initGoogleMap() below
+let currentMarkers = [];
+let routePolyline = null;
 let gpsMarker = null;
 let gpsPos = null; // { lat, lng }
+let infoWindow;
+
+// Load the Google Maps JS API now that we have the key, then boot the rest of the app
+(function loadGoogleMaps(){
+  if(GOOGLE_MAPS_API_KEY.includes('YOUR-GOOGLE-MAPS-API-KEY')){
+    document.getElementById('headerMeta').textContent = 'Google Maps key missing';
+    document.getElementById('checklist').innerHTML = '<div class="empty-hint">Open this file, find GOOGLE_MAPS_API_KEY near the top of the script, and paste in a real Google Maps JavaScript API key (Google Cloud Console → Credentials, with the "Maps JavaScript API" enabled).</div>';
+    return;
+  }
+  const s = document.createElement('script');
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&language=en&region=AE&callback=initGoogleMap`;
+  s.async = true;
+  s.onerror = () => { document.getElementById('headerMeta').textContent = 'Google Maps failed to load'; };
+  document.head.appendChild(s);
+})();
+
+window.initGoogleMap = function(){
+  map = new google.maps.Map(document.getElementById('map'), {
+    center: { lat: 25.2, lng: 55.2 },
+    zoom: 10,
+    mapTypeControl: true,
+    mapTypeControlOptions: {
+      style: google.maps.MapTypeControlStyle.HORIZONTAL_BAR,
+      position: google.maps.ControlPosition.TOP_RIGHT,
+      mapTypeIds: ['roadmap', 'satellite']
+    },
+    streetViewControl: true,
+    streetViewControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+    zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+    fullscreenControl: false
+  });
+  infoWindow = new google.maps.InfoWindow();
+  initAdmin();
+  loadAndRender();
+};
+
+function clearMarkers(){
+  currentMarkers.forEach(m => m.setMap(null));
+  currentMarkers = [];
+}
+function pinIcon(color, scale){
+  return { path: google.maps.SymbolPath.CIRCLE, fillColor: color, fillOpacity: 1, strokeColor: '#12161d', strokeWeight: 2, scale: scale };
+}
 
 function haversine(a, b){
   const R = 6371;
@@ -1013,7 +1044,7 @@ function popupHtml(s){
 window.editSiteFromMap = function(siteId){
   const site = SITES.find(s => s.id === siteId);
   if(!site) return;
-  map.closePopup();
+  infoWindow.close();
   requireAdmin(() => openManage('edit', site));
 };
 
@@ -1045,13 +1076,17 @@ async function computeRoute(){
   const chosen = sitesForManager(state.manager).filter(s => state.checked.has(s.id) && s.valid);
   const manifestEl = document.getElementById('manifest');
   const countEl = document.getElementById('manifestCount');
-  markerLayer.clearLayers();
-  if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+  clearMarkers();
+  if(routePolyline){ routePolyline.setMap(null); routePolyline = null; }
 
   mapCandidateSites().forEach(s => {
     if(!s.valid || state.checked.has(s.id)) return;
-    const icon = L.divIcon({ className: '', html: `<div class="num-pin unrouted"></div>`, iconSize:[9,9] });
-    L.marker([s.lat, s.lng], { icon }).bindPopup(popupHtml(s)).bindTooltip(s.name).addTo(markerLayer);
+    const marker = new google.maps.Marker({
+      position: { lat: s.lat, lng: s.lng }, map, title: s.name,
+      icon: pinIcon('#5c6577', 5)
+    });
+    marker.addListener('click', () => { infoWindow.setContent(popupHtml(s)); infoWindow.open(map, marker); });
+    currentMarkers.push(marker);
   });
 
   if(chosen.length === 0){
@@ -1151,21 +1186,43 @@ async function computeRoute(){
   const durLabel = roadGeometry ? ` · ~${Math.round(roadGeometry.duration/60)} min` : '';
   document.getElementById('totalDist').textContent = totalLabel + ' km' + durLabel + (usedFallback ? ' (straight-line — driving service unavailable)' : ' driving');
 
-  const startIcon = L.divIcon({ className:'', html:`<div class="num-pin start">S</div>`, iconSize:[24,24] });
-  const startMarker = L.marker([startSite.lat, startSite.lng], { icon: startIcon }).bindTooltip(startSite.name).addTo(markerLayer);
-  if(startSite.id !== 'gps' && startSite.id !== 'custom') startMarker.bindPopup(popupHtml(startSite));
+  const startMarker = new google.maps.Marker({
+    position: { lat: startSite.lat, lng: startSite.lng }, map, title: startSite.name,
+    icon: pinIcon('#3ea8a0', 11),
+    label: { text: 'S', color: '#12161d', fontWeight: '700', fontSize: '12px' },
+    zIndex: 999
+  });
+  if(startSite.id !== 'gps' && startSite.id !== 'custom'){
+    startMarker.addListener('click', () => { infoWindow.setContent(popupHtml(startSite)); infoWindow.open(map, startMarker); });
+  }
+  currentMarkers.push(startMarker);
+  const bounds = new google.maps.LatLngBounds();
+  bounds.extend(startMarker.getPosition());
   route.forEach((r, i) => {
-    const icon = L.divIcon({ className:'', html:`<div class="num-pin">${i+1}</div>`, iconSize:[24,24] });
-    L.marker([r.site.lat, r.site.lng], { icon }).bindPopup(popupHtml(r.site)).bindTooltip(r.site.name).addTo(markerLayer);
+    const marker = new google.maps.Marker({
+      position: { lat: r.site.lat, lng: r.site.lng }, map, title: r.site.name,
+      icon: pinIcon('#e8a33d', 11),
+      label: { text: String(i + 1), color: '#12161d', fontWeight: '700', fontSize: '12px' }
+    });
+    marker.addListener('click', () => { infoWindow.setContent(popupHtml(r.site)); infoWindow.open(map, marker); });
+    currentMarkers.push(marker);
+    bounds.extend(marker.getPosition());
   });
 
   if(roadGeometry){
-    routeLine = L.polyline(roadGeometry.coords, { color:'#e8a33d', weight:4, opacity:0.85 }).addTo(map);
+    routePolyline = new google.maps.Polyline({
+      path: roadGeometry.coords.map(c => ({ lat: c[0], lng: c[1] })),
+      strokeColor: '#e8a33d', strokeWeight: 4, strokeOpacity: 0.85, map
+    });
   } else {
-    const latlngs = orderedPoints.map(p => [p.lat, p.lng]);
-    routeLine = L.polyline(latlngs, { color:'#e8a33d', weight:2.5, opacity:0.8, dashArray:'1,6' }).addTo(map);
+    routePolyline = new google.maps.Polyline({
+      path: orderedPoints.map(p => ({ lat: p.lat, lng: p.lng })),
+      strokeColor: '#e8a33d', strokeOpacity: 0,
+      icons: [{ icon: { path: 'M 0,-1 0,1', strokeOpacity: 0.8, scale: 3 }, offset: '0', repeat: '12px' }],
+      map
+    });
   }
-  map.fitBounds(routeLine.getBounds(), { padding:[40,40] });
+  map.fitBounds(bounds, 40);
 
   if(startSite.id === 'gps'){
     // Let Google Maps use the device's live location as the origin
@@ -1177,7 +1234,8 @@ async function computeRoute(){
 }
 
 function focusSite(s){
-  map.setView([s.lat, s.lng], 15, { animate:true });
+  map.panTo({ lat: s.lat, lng: s.lng });
+  map.setZoom(15);
   if(isMobile()) document.getElementById('sidebar').classList.add('collapsed');
 }
 function refreshAll(){ refreshStartOptions(); refreshChecklist(); computeRoute(); }
@@ -1223,11 +1281,13 @@ function locateMe(recenter){
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         gpsPos = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if(gpsMarker) map.removeLayer(gpsMarker);
-        gpsMarker = L.marker([gpsPos.lat, gpsPos.lng], {
-          icon: L.divIcon({ className:'', html:'<div class="gps-dot"></div>', iconSize:[16,16] })
-        }).bindTooltip('You are here').addTo(map);
-        if(recenter) map.setView([gpsPos.lat, gpsPos.lng], 14, { animate:true });
+        if(gpsMarker) gpsMarker.setMap(null);
+        gpsMarker = new google.maps.Marker({
+          position: gpsPos, map, title: 'You are here',
+          icon: { path: google.maps.SymbolPath.CIRCLE, fillColor: '#4285F4', fillOpacity: 1, strokeColor: '#fff', strokeWeight: 3, scale: 8 },
+          zIndex: 1000
+        });
+        if(recenter){ map.panTo(gpsPos); map.setZoom(14); }
         resolve(gpsPos);
       },
       (err) => { document.getElementById('locateBtn').classList.remove('active'); reject(err); },
@@ -1246,7 +1306,7 @@ async function routeFromGPSImpl(siteId){
     alert('Could not get your GPS location. Please allow location access and try again.');
     return;
   }
-  map.closePopup();
+  infoWindow.close();
   document.getElementById('rtName').textContent = `Routing to ${site.name}…`;
   document.getElementById('rtDist').textContent = '—';
   document.getElementById('rtDur').textContent = '—';
@@ -1258,11 +1318,13 @@ async function routeFromGPSImpl(siteId){
     const data = await res.json();
     if(!data.routes || !data.routes.length) throw new Error('No route found');
     const r = data.routes[0];
-    const coords = r.geometry.coordinates.map(c => [c[1], c[0]]);
+    const coords = r.geometry.coordinates.map(c => ({ lat: c[1], lng: c[0] }));
 
-    if(routeLine) map.removeLayer(routeLine);
-    routeLine = L.polyline(coords, { color:'#4285F4', weight:5, opacity:0.85 }).addTo(map);
-    map.fitBounds(routeLine.getBounds(), { padding:[60,60] });
+    if(routePolyline) routePolyline.setMap(null);
+    routePolyline = new google.maps.Polyline({ path: coords, strokeColor: '#4285F4', strokeWeight: 5, strokeOpacity: 0.85, map });
+    const bounds = new google.maps.LatLngBounds();
+    coords.forEach(c => bounds.extend(c));
+    map.fitBounds(bounds, 60);
 
     const km = (r.distance / 1000).toFixed(1);
     const mins = Math.round(r.duration / 60);
@@ -1279,12 +1341,23 @@ async function routeFromGPSImpl(siteId){
 function hideRouteToast(){ document.getElementById('routeToast').classList.add('hidden'); }
 window.routeFromGPS = routeFromGPSImpl;
 
-// ---------- Street View (opens in a new tab — Google blocks this from being framed/embedded) ----------
+// ---------- Street View (native, embedded directly in the map — real Google panorama) ----------
 window.showStreetView = function(siteId){
   const site = SITES.find(s => s.id === siteId);
   if(!site) return;
-  window.open(`https://www.google.com/maps?layer=c&cbll=${site.lat},${site.lng}&output=svembed`, '_blank');
-  map.closePopup();
+  infoWindow.close();
+  const svService = new google.maps.StreetViewService();
+  const panorama = map.getStreetView();
+  svService.getPanorama({ location: { lat: site.lat, lng: site.lng }, radius: 75 }, (data, status) => {
+    if(status === 'OK'){
+      panorama.setPosition(data.location.latLng);
+      panorama.setPov({ heading: 0, pitch: 0 });
+      panorama.setOptions({ enableCloseButton: true });
+      panorama.setVisible(true);
+    }else{
+      alert(`No Street View imagery is available near ${site.name}.`);
+    }
+  });
 };
 
 function showConnectionError(message){
@@ -1324,11 +1397,11 @@ async function loadAndRender(){
   }
 }
 
-(async function initAdmin(){
+async function initAdmin(){
   await loadAdminSession();
   updateAdminUI();
-})();
-loadAndRender();
+}
+
 </script>
 </body>
 </html>
