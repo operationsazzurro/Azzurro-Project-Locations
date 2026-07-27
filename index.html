@@ -574,6 +574,7 @@ function updateAdminUI(){
   const btn = document.getElementById('adminBtn');
   if(adminSession){ btn.textContent = '🔓'; btn.title = `Signed in as ${adminSession.email} (click to sign out)`; }
   else{ btn.textContent = '🔒'; btn.title = 'Admin sign in'; }
+  if(SITES.length){ refreshChecklist(); computeRoute(); }
 }
 
 function requireAdmin(action){
@@ -983,12 +984,13 @@ function refreshChecklist(){
         <input type="checkbox" ${state.checked.has(s.id) ? 'checked' : ''} ${!s.valid ? 'disabled' : ''} data-id="${s.id}">
         <div class="name">${s.name}<span class="emirate-tag">${s.emirate}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>
       </label>
-      <button class="row-edit-btn" title="Edit this site">✎</button>`;
+      ${adminSession ? `<button class="row-edit-btn" title="Edit this site">✎</button>` : ''}`;
     row.querySelector('input').onchange = (e) => {
       if(e.target.checked) state.checked.add(s.id); else state.checked.delete(s.id);
       computeRoute();
     };
-    row.querySelector('.row-edit-btn').onclick = (e) => { e.stopPropagation(); requireAdmin(() => openManage('edit', s)); };
+    const editBtn = row.querySelector('.row-edit-btn');
+    if(editBtn) editBtn.onclick = (e) => { e.stopPropagation(); openManage('edit', s); };
     wrap.appendChild(row);
   });
   if(visibleSites().length === 0){
@@ -1003,9 +1005,9 @@ function popupHtml(s){
       <button onclick="window.routeFromGPS(${s.id})">🧭 Route</button>
       <button class="secondary" onclick="window.showStreetView(${s.id})">👁 Street View</button>
     </div>
-    <div class="prow" style="margin-top:6px;">
+    ${adminSession ? `<div class="prow" style="margin-top:6px;">
       <button class="secondary" onclick="window.editSiteFromMap(${s.id})">✎ Edit Site</button>
-    </div>
+    </div>` : ''}
   </div>`;
 }
 window.editSiteFromMap = function(siteId){
