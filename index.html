@@ -497,7 +497,7 @@ let cfg = { url: SUPABASE_URL.replace(/\/$/, ''), key: SUPABASE_ANON_KEY };
 let adminSession = null; // { access_token, refresh_token, expires_at, email }
 let pendingAdminAction = null; // function to run right after a successful sign-in
 
-let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, search: '', customStart: null };
+let state = { manager: null, emirate: 'ALL', checked: new Set(), start: null, startAutoPicked: true, search: '', customStart: null };
 
 let map; // assigned once the Google Maps API finishes loading, see initGoogleMap() below
 let currentMarkers = [];
@@ -1001,17 +1001,25 @@ function initControls(){
   });
   if(!state.manager) state.manager = 'ALL';
   mgrSel.value = state.manager;
-  mgrSel.onchange = () => { state.manager = mgrSel.value; state.checked = new Set(); refreshEmirateOptions(); refreshAll(); };
+  mgrSel.onchange = () => { state.manager = mgrSel.value; state.checked = new Set(); state.start = null; state.startAutoPicked = true; refreshEmirateOptions(); refreshAll(); };
 
   refreshEmirateOptions();
   document.getElementById('emirateSelect').onchange = (e) => { state.emirate = e.target.value; refreshChecklist(); computeRoute(); };
 
   document.getElementById('searchBox').oninput = (e) => { state.search = e.target.value; refreshChecklist(); };
-  document.getElementById('selAll').onclick = () => { visibleSites().forEach(s => { if(s.valid) state.checked.add(s.id); }); refreshChecklist(); computeRoute(); };
-  document.getElementById('selNone').onclick = () => { state.checked.clear(); refreshChecklist(); computeRoute(); };
+  document.getElementById('selAll').onclick = () => { visibleSites().forEach(s => { if(s.valid) state.checked.add(s.id); }); autoAssignStart(); refreshChecklist(); computeRoute(); };
+  document.getElementById('selNone').onclick = () => { state.checked.clear(); autoAssignStart(); refreshChecklist(); computeRoute(); };
   document.getElementById('startSelect').onchange = (e) => {
     const v = e.target.value;
+    if(v === ''){
+      state.start = null;
+      state.startAutoPicked = true;
+      document.getElementById('customLocPanel').classList.add('hidden');
+      computeRoute();
+      return;
+    }
     state.start = (v === 'gps' || v === 'custom') ? v : parseInt(v);
+    state.startAutoPicked = false;
     document.getElementById('customLocPanel').classList.toggle('hidden', v !== 'custom');
     if(v !== 'custom') computeRoute();
     else if(state.customStart) computeRoute();
@@ -1129,6 +1137,10 @@ function setupSheetDrag(){
 function refreshStartOptions(){
   const sel = document.getElementById('startSelect');
   sel.innerHTML = '';
+  const placeholderOpt = document.createElement('option');
+  placeholderOpt.value = '';
+  placeholderOpt.textContent = '— Select start point —';
+  sel.appendChild(placeholderOpt);
   const gpsOpt = document.createElement('option');
   gpsOpt.value = 'gps';
   gpsOpt.textContent = '📍 My Current Location (GPS)';
@@ -1139,10 +1151,18 @@ function refreshStartOptions(){
   sel.appendChild(customOpt);
   const list = sitesForManager(state.manager).filter(s => s.valid);
   list.forEach(s => { const o = document.createElement('option'); o.value = s.id; o.textContent = s.name; sel.appendChild(o); });
-  const hq = list.find(s => s.name.toUpperCase().includes('HEAD OFFICE'));
-  state.start = hq ? hq.id : (list[0] ? list[0].id : null);
-  if(state.start) sel.value = state.start;
+  sel.value = (state.start === null || state.start === undefined) ? '' : state.start;
   document.getElementById('customLocPanel').classList.add('hidden');
+}
+
+// If the start point hasn't been manually chosen, auto-set it to the
+// first checked site (in list order). Reverts to empty when nothing's checked.
+function autoAssignStart(){
+  if(!state.startAutoPicked) return;
+  const firstChecked = SITES.find(s => state.checked.has(s.id) && s.valid);
+  state.start = firstChecked ? firstChecked.id : null;
+  const sel = document.getElementById('startSelect');
+  if(sel) sel.value = state.start === null ? '' : state.start;
 }
 
 function refreshChecklist(){
@@ -1159,6 +1179,7 @@ function refreshChecklist(){
       ${adminSession ? `<button class="row-edit-btn" title="Edit this site">✎</button>` : ''}`;
     row.querySelector('input').onchange = (e) => {
       if(e.target.checked) state.checked.add(s.id); else state.checked.delete(s.id);
+      autoAssignStart();
       computeRoute();
     };
     const editBtn = row.querySelector('.row-edit-btn');
