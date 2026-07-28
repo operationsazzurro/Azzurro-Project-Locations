@@ -572,11 +572,23 @@ function haversine(a, b){
 }
 
 async function fetchSites(){
-  const res = await fetch(`${cfg.url}/rest/v1/sites?select=*&order=site_name.asc`, {
-    headers: { apikey: cfg.key, Authorization: `Bearer ${cfg.key}` }
-  });
-  if(!res.ok){ throw new Error(`Supabase error ${res.status}: ${await res.text()}`); }
-  const rows = await res.json();
+  const PAGE_SIZE = 1000;
+  let rows = [];
+  let from = 0;
+  while(true){
+    const res = await fetch(`${cfg.url}/rest/v1/sites?select=*&order=site_name.asc`, {
+      headers: {
+        apikey: cfg.key,
+        Authorization: `Bearer ${cfg.key}`,
+        Range: `${from}-${from + PAGE_SIZE - 1}`
+      }
+    });
+    if(!res.ok){ throw new Error(`Supabase error ${res.status}: ${await res.text()}`); }
+    const page = await res.json();
+    rows = rows.concat(page);
+    if(page.length < PAGE_SIZE) break; // last page reached
+    from += PAGE_SIZE;
+  }
   return rows.map(r => ({
     id: r.id,
     name: r.site_name,
