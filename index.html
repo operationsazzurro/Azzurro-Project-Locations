@@ -41,6 +41,7 @@
   .map-legend.hidden{ display:none; }
   .legend-title{ font-size:10px; text-transform:uppercase; letter-spacing:0.08em; color:var(--text-dim); font-weight:600; margin-bottom:7px; }
   .legend-row{ display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-primary); padding:2.5px 0; }
+  .legend-row svg{ flex-shrink:0; display:block; }
   .legend-dot{ width:10px; height:10px; border-radius:50%; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.4); }
   .mgr-dot{ display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; flex-shrink:0; box-shadow:0 0 0 1px rgba(0,0,0,0.35); }
   .map-error{
@@ -96,6 +97,7 @@
   .site-row input{ margin-top:3px; accent-color:var(--amber); }
   .site-row .name{ font-size:12.5px; line-height:1.35; }
   .site-row .emirate-tag{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--text-dim); margin-left:5px; }
+  .site-row .category-tag{ font-family:'IBM Plex Mono',monospace; font-size:9.5px; color:var(--teal); margin-left:5px; }
   .site-row .flag{ color:var(--danger); font-size:10px; margin-left:4px; }
   .row-edit-btn{
     background:none; border:none; color:var(--text-dim); cursor:pointer; font-size:13px;
@@ -176,6 +178,7 @@
     padding:10px; border-radius:6px; margin:-8px;
   }
   .popup-card .pname{ font-size:12.5px; font-weight:600; margin-bottom:8px; line-height:1.3; }
+  .popup-card .psub{ font-size:10.5px; color:var(--text-muted); margin:-5px 0 8px 0; font-family:'IBM Plex Mono',monospace; }
   .popup-card .prow{ display:flex; gap:6px; }
   .popup-card button{
     flex:1; background:var(--amber); color:var(--ink); border:none; border-radius:5px;
@@ -421,6 +424,11 @@
               <datalist id="managerList"></datalist>
             </div>
             <div class="field">
+              <label>Category</label>
+              <input type="text" id="fCategory" list="categoryList" placeholder="General">
+              <datalist id="categoryList"></datalist>
+            </div>
+            <div class="field">
               <label>Latitude</label>
               <input type="text" id="fLat" placeholder="25.317292">
             </div>
@@ -443,11 +451,11 @@
         <div class="manage-pane" id="paneBulk">
           <div class="field">
             <label>Paste CSV</label>
-            <textarea class="bulk-textarea" id="bulkText" placeholder="site_name,emirate,google_map,latitude,longitude,manager
-GENAVCO Dubai,DUBAI,https://maps.app.goo.gl/xxxx,25.2324,55.3699,Rahul"></textarea>
+            <textarea class="bulk-textarea" id="bulkText" placeholder="site_name,emirate,google_map,latitude,longitude,manager,category
+GENAVCO Dubai,DUBAI,https://maps.app.goo.gl/xxxx,25.2324,55.3699,Rahul,General"></textarea>
           </div>
           <div class="bulk-hint">
-            Header row optional. Columns in order: <code>site_name, emirate, google_map, latitude, longitude, manager</code> (google_map link and latitude/longitude may be left blank). Or upload a file instead:
+            Header row optional. Columns in order: <code>site_name, emirate, google_map, latitude, longitude, manager, category</code> (google_map link, latitude/longitude, and category may be left blank — category defaults to <code>General</code>). Or upload a file instead:
           </div>
           <div class="file-row">
             <input type="file" id="bulkFile" accept=".csv,text/csv">
@@ -552,14 +560,49 @@ function managerColor(name){
   if(idx === -1) return '#5c6577';
   return MANAGER_PALETTE[idx % MANAGER_PALETTE.length];
 }
+
+// ---------- Category (site type) shapes ----------
+// Paths are drawn on a roughly 8-unit-radius canvas so a given `scale`
+// produces a similarly-sized marker across shapes.
+const CATEGORY_SHAPES = {
+  'Mosque': 'M 0,-8 L 2.2,-2.8 L 8,-2.5 L 3.4,1.4 L 4.9,7.6 L 0,4.3 L -4.9,7.6 L -3.4,1.4 L -8,-2.5 L -2.2,-2.8 Z',
+  'School': 'M -7,-7 L 7,-7 L 7,7 L -7,7 Z'
+};
+function categories(){ return [...new Set(SITES.map(s => s.category || 'General'))].sort(); }
+function categoryPinIcon(site, sizeScale){
+  const color = managerColor(site.manager);
+  const category = site.category || 'General';
+  const shapePath = CATEGORY_SHAPES[category];
+  if(!shapePath) return pinIcon(color, sizeScale); // 'General' (and anything unrecognized) stays a circle
+  return {
+    path: shapePath, fillColor: color, fillOpacity: 1,
+    strokeColor: '#12161d', strokeWeight: 1.5,
+    scale: sizeScale / 8
+  };
+}
+function categoryShapeSvg(category){
+  const shapePath = CATEGORY_SHAPES[category];
+  if(!shapePath) return `<svg width="12" height="12" viewBox="-9 -9 18 18"><circle cx="0" cy="0" r="7" fill="#c7ccd6"/></svg>`;
+  return `<svg width="12" height="12" viewBox="-9 -9 18 18"><path d="${shapePath}" fill="#c7ccd6"/></svg>`;
+}
+
 function renderLegend(){
   const legend = document.getElementById('mapLegend');
   if(!legend) return;
-  const list = managers().filter(Boolean);
-  if(!list.length){ legend.classList.add('hidden'); legend.innerHTML = ''; return; }
+  const mgrList = managers().filter(Boolean);
+  const catList = categories();
+  if(!mgrList.length && !catList.length){ legend.classList.add('hidden'); legend.innerHTML = ''; return; }
   legend.classList.remove('hidden');
-  legend.innerHTML = '<div class="legend-title">Managers</div>' +
-    list.map(m => `<div class="legend-row"><span class="legend-dot" style="background:${managerColor(m)}"></span>${m}</div>`).join('');
+  let html = '';
+  if(mgrList.length){
+    html += '<div class="legend-title">Managers</div>' +
+      mgrList.map(m => `<div class="legend-row"><span class="legend-dot" style="background:${managerColor(m)}"></span>${m}</div>`).join('');
+  }
+  if(catList.length){
+    html += '<div class="legend-title" style="margin-top:10px;">Site Type</div>' +
+      catList.map(c => `<div class="legend-row">${categoryShapeSvg(c)}${c}</div>`).join('');
+  }
+  legend.innerHTML = html;
 }
 
 function haversine(a, b){
@@ -597,6 +640,7 @@ async function fetchSites(){
     lat: r.latitude,
     lng: r.longitude,
     manager: r.manager,
+    category: r.category || 'General',
     valid: r.latitude !== null && r.longitude !== null
   }));
 }
@@ -741,6 +785,8 @@ function populateDatalists(){
   const emirates = [...new Set(SITES.map(s => s.emirate).filter(Boolean))];
   ['DUBAI','SHARJAH','ABU DHABI','AJMAN','FUJAIRAH','RAS AL KHAIMAH','UMM AL QUWAIN'].forEach(e => { if(!emirates.includes(e)) emirates.push(e); });
   document.getElementById('emirateList').innerHTML = emirates.map(e => `<option value="${e}">`).join('');
+  const categoryOptions = [...new Set(['General','Mosque','School', ...SITES.map(s => s.category).filter(Boolean)])];
+  document.getElementById('categoryList').innerHTML = categoryOptions.map(c => `<option value="${c}">`).join('');
 }
 
 function openManage(mode, site){
@@ -754,6 +800,7 @@ function openManage(mode, site){
     document.getElementById('fSiteName').value = site.name;
     document.getElementById('fEmirate').value = site.emirate;
     document.getElementById('fManager').value = site.manager;
+    document.getElementById('fCategory').value = site.category || 'General';
     document.getElementById('fLat').value = site.lat ?? '';
     document.getElementById('fLng').value = site.lng ?? '';
     document.getElementById('fLink').value = site.link || '';
@@ -764,6 +811,7 @@ function openManage(mode, site){
     document.getElementById('fSiteName').value = '';
     document.getElementById('fEmirate').value = (state.manager && state.manager !== 'ALL' && state.emirate !== 'ALL') ? state.emirate : '';
     document.getElementById('fManager').value = (state.manager && state.manager !== 'ALL') ? state.manager : '';
+    document.getElementById('fCategory').value = 'General';
     document.getElementById('fLat').value = '';
     document.getElementById('fLng').value = '';
     document.getElementById('fLink').value = '';
@@ -786,6 +834,7 @@ async function saveSite(){
   const name = document.getElementById('fSiteName').value.trim();
   const emirate = document.getElementById('fEmirate').value.trim().toUpperCase();
   const manager = document.getElementById('fManager').value.trim();
+  const category = document.getElementById('fCategory').value.trim() || 'General';
   const latRaw = document.getElementById('fLat').value.trim();
   const lngRaw = document.getElementById('fLng').value.trim();
   const link = document.getElementById('fLink').value.trim();
@@ -799,7 +848,7 @@ async function saveSite(){
     if(isNaN(lat) || isNaN(lng)){ msg.textContent = 'Latitude/Longitude must both be numbers, or both left blank.'; msg.className = 'form-msg err'; return; }
   }
 
-  const payload = { site_name: name, emirate, manager, latitude: lat, longitude: lng, google_map: link || null };
+  const payload = { site_name: name, emirate, manager, category, latitude: lat, longitude: lng, google_map: link || null };
   msg.textContent = 'Saving…'; msg.className = 'form-msg';
   try{
     if(id){ await supabaseUpdate(id, payload); }
@@ -845,7 +894,8 @@ function parseBulkInput(){
     google_map: (cols[2] || '').trim(),
     latitude: (cols[3] || '').trim(),
     longitude: (cols[4] || '').trim(),
-    manager: (cols[5] || '').trim()
+    manager: (cols[5] || '').trim(),
+    category: (cols[6] || '').trim()
   }));
 }
 
@@ -868,14 +918,15 @@ function renderBulkPreview(rows){
       if(isNaN(lat) || isNaN(lng)) errors.push('bad coordinates');
     }
     const ok = errors.length === 0;
-    if(ok){ validCount++; parsedBulkRows.push({ site_name:r.site_name, emirate:r.emirate, manager:r.manager, latitude: isNaN(lat)?null:lat, longitude: isNaN(lng)?null:lng, google_map: r.google_map || null }); }
-    return `<tr class="${ok?'':'row-err'}"><td>${r.site_name||'—'}</td><td>${r.emirate||'—'}</td><td>${r.google_map||'—'}</td><td>${r.latitude||'—'}</td><td>${r.longitude||'—'}</td><td>${r.manager||'—'}</td><td>${ok?'OK':errors.join(', ')}</td></tr>`;
+    const category = r.category || 'General';
+    if(ok){ validCount++; parsedBulkRows.push({ site_name:r.site_name, emirate:r.emirate, manager:r.manager, category, latitude: isNaN(lat)?null:lat, longitude: isNaN(lng)?null:lng, google_map: r.google_map || null }); }
+    return `<tr class="${ok?'':'row-err'}"><td>${r.site_name||'—'}</td><td>${r.emirate||'—'}</td><td>${r.google_map||'—'}</td><td>${r.latitude||'—'}</td><td>${r.longitude||'—'}</td><td>${r.manager||'—'}</td><td>${category}</td><td>${ok?'OK':errors.join(', ')}</td></tr>`;
   }).join('');
 
   area.innerHTML = `
     <div class="preview-table-wrap">
       <table class="preview-table">
-        <thead><tr><th>Site</th><th>Emirate</th><th>Google Map</th><th>Lat</th><th>Lng</th><th>Manager</th><th>Status</th></tr></thead>
+        <thead><tr><th>Site</th><th>Emirate</th><th>Google Map</th><th>Lat</th><th>Lng</th><th>Manager</th><th>Category</th><th>Status</th></tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
     </div>
@@ -948,7 +999,7 @@ function initControls(){
   managers().forEach(m => {
     const o = document.createElement('option'); o.value = m; o.textContent = m; mgrSel.appendChild(o);
   });
-  if(!state.manager) state.manager = managers()[0] || 'ALL';
+  if(!state.manager) state.manager = 'ALL';
   mgrSel.value = state.manager;
   mgrSel.onchange = () => { state.manager = mgrSel.value; state.checked = new Set(); refreshEmirateOptions(); refreshAll(); };
 
@@ -1103,7 +1154,7 @@ function refreshChecklist(){
     row.innerHTML = `
       <label style="display:flex;align-items:flex-start;gap:9px;flex:1;min-width:0;cursor:pointer;">
         <input type="checkbox" ${state.checked.has(s.id) ? 'checked' : ''} ${!s.valid ? 'disabled' : ''} data-id="${s.id}">
-        <div class="name"><span class="mgr-dot" style="background:${managerColor(s.manager)}"></span>${s.name}<span class="emirate-tag">${s.emirate}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>
+        <div class="name"><span class="mgr-dot" style="background:${managerColor(s.manager)}"></span>${s.name}<span class="emirate-tag">${s.emirate}</span><span class="category-tag">${s.category || 'General'}</span>${!s.valid ? '<span class="flag">⚑ no coords</span>' : ''}</div>
       </label>
       ${adminSession ? `<button class="row-edit-btn" title="Edit this site">✎</button>` : ''}`;
     row.querySelector('input').onchange = (e) => {
@@ -1122,6 +1173,7 @@ function refreshChecklist(){
 function popupHtml(s){
   return `<div class="popup-card">
     <div class="pname">${s.name}</div>
+    <div class="psub">${s.manager || '—'} · ${s.category || 'General'}</div>
     <div class="prow">
       <button onclick="window.routeFromGPS(${s.id})">🧭 Route</button>
       <button class="secondary" onclick="window.showStreetView(${s.id})">👁 Street View</button>
@@ -1175,8 +1227,8 @@ async function computeRoute(){
     mapCandidateSites().forEach(s => {
       if(!s.valid || state.checked.has(s.id)) return;
       const marker = new google.maps.Marker({
-        position: { lat: s.lat, lng: s.lng }, map, title: `${s.name} (${s.manager})`,
-        icon: pinIcon(managerColor(s.manager), 6)
+        position: { lat: s.lat, lng: s.lng }, map, title: `${s.name} (${s.manager} · ${s.category || 'General'})`,
+        icon: categoryPinIcon(s, 6)
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(s)); infoWindow.open(map, marker); });
       currentMarkers.push(marker);
@@ -1295,8 +1347,8 @@ async function computeRoute(){
     bounds.extend(startMarker.getPosition());
     route.forEach((r, i) => {
       const marker = new google.maps.Marker({
-        position: { lat: r.site.lat, lng: r.site.lng }, map, title: `${r.site.name} (${r.site.manager})`,
-        icon: pinIcon(managerColor(r.site.manager), 11),
+        position: { lat: r.site.lat, lng: r.site.lng }, map, title: `${r.site.name} (${r.site.manager} · ${r.site.category || 'General'})`,
+        icon: categoryPinIcon(r.site, 11),
         label: { text: String(i + 1), color: '#12161d', fontWeight: '700', fontSize: '12px' }
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(r.site)); infoWindow.open(map, marker); });
