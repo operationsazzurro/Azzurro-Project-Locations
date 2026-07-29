@@ -573,7 +573,9 @@ function categoryGlyphSvg(category, fill){
     // Simplified graduation cap (mortarboard + band)
     return `<polygon points="20,11 29,16 20,21 11,16" fill="${fill}"/><rect x="17" y="21" width="6" height="2" fill="${fill}"/>`;
   }
-  return ''; // General: no glyph, just the plain colored pin
+  // General (and anything unrecognized): a plain center dot, so it still
+  // visibly renders as "an icon" rather than looking like nothing loaded.
+  return `<circle cx="20" cy="20" r="4.5" fill="${fill}"/>`;
 }
 function categories(){ return [...new Set(SITES.map(s => s.category || 'General'))].sort(); }
 
@@ -596,6 +598,7 @@ function categoryPinIcon(site, size, numberLabel){
   const category = site.category || 'General';
   return {
     url: categoryIconUrl(category, color, numberLabel || null),
+    size: new google.maps.Size(40, 40),
     scaledSize: new google.maps.Size(size, size),
     anchor: new google.maps.Point(size / 2, size / 2)
   };
@@ -1268,7 +1271,7 @@ async function computeRoute(){
       if(!s.valid || state.checked.has(s.id)) return;
       const marker = new google.maps.Marker({
         position: { lat: s.lat, lng: s.lng }, map, title: `${s.name} (${s.manager} · ${s.category || 'General'})`,
-        icon: categoryPinIcon(s, 26)
+        icon: categoryPinIcon(s, 18)
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(s)); infoWindow.open(map, marker); });
       currentMarkers.push(marker);
@@ -1388,7 +1391,7 @@ async function computeRoute(){
     route.forEach((r, i) => {
       const marker = new google.maps.Marker({
         position: { lat: r.site.lat, lng: r.site.lng }, map, title: `${r.site.name} (${r.site.manager} · ${r.site.category || 'General'})`,
-        icon: categoryPinIcon(r.site, 34, i + 1)
+        icon: categoryPinIcon(r.site, 26, i + 1)
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(r.site)); infoWindow.open(map, marker); });
       currentMarkers.push(marker);
