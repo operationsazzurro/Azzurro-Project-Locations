@@ -564,7 +564,17 @@ function managerColor(name){
 // ---------- Category (site type) icons ----------
 // Each site type gets a recognizable white glyph drawn on a 40x40 canvas,
 // centered at (20,20), stamped onto a manager-colored circular pin.
-function categoryGlyphSvg(category, fill){
+// Normalizes a raw category string from the DB into one of our known
+// glyph buckets — tolerant of case, whitespace, and plurals
+// ("mosques", "Schools", " school " all resolve correctly).
+function normalizeCategory(raw){
+  const c = (raw || '').trim().toLowerCase().replace(/s$/, ''); // strip a trailing plural 's'
+  if(c === 'mosque') return 'Mosque';
+  if(c === 'school') return 'School';
+  return 'General';
+}
+function categoryGlyphSvg(rawCategory, fill){
+  const category = normalizeCategory(rawCategory);
   if(category === 'Mosque'){
     // Crescent moon (classic "circle minus offset circle" path trick)
     return `<path d="M20,12 A8,8 0 1,0 20,28 A6,6 0 1,1 20,12 Z" fill="${fill}"/>`;
