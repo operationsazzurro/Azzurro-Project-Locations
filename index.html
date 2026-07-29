@@ -561,29 +561,48 @@ function managerColor(name){
   return MANAGER_PALETTE[idx % MANAGER_PALETTE.length];
 }
 
-// ---------- Category (site type) shapes ----------
-// Paths are drawn on a roughly 8-unit-radius canvas so a given `scale`
-// produces a similarly-sized marker across shapes.
-const CATEGORY_SHAPES = {
-  'Mosque': 'M 0,-8 L 2.2,-2.8 L 8,-2.5 L 3.4,1.4 L 4.9,7.6 L 0,4.3 L -4.9,7.6 L -3.4,1.4 L -8,-2.5 L -2.2,-2.8 Z',
-  'School': 'M -7,-7 L 7,-7 L 7,7 L -7,7 Z'
-};
+// ---------- Category (site type) icons ----------
+// Each site type gets a recognizable white glyph drawn on a 40x40 canvas,
+// centered at (20,20), stamped onto a manager-colored circular pin.
+function categoryGlyphSvg(category, fill){
+  if(category === 'Mosque'){
+    // Crescent moon (classic "circle minus offset circle" path trick)
+    return `<path d="M20,12 A8,8 0 1,0 20,28 A6,6 0 1,1 20,12 Z" fill="${fill}"/>`;
+  }
+  if(category === 'School'){
+    // Simplified graduation cap (mortarboard + band)
+    return `<polygon points="20,11 29,16 20,21 11,16" fill="${fill}"/><rect x="17" y="21" width="6" height="2" fill="${fill}"/>`;
+  }
+  return ''; // General: no glyph, just the plain colored pin
+}
 function categories(){ return [...new Set(SITES.map(s => s.category || 'General'))].sort(); }
-function categoryPinIcon(site, sizeScale){
+
+// Builds a data-URI SVG marker icon: colored circular pin + category glyph,
+// with an optional small number badge in the corner (used for route stops).
+function categoryIconUrl(category, color, numberLabel){
+  const glyph = categoryGlyphSvg(category, '#ffffff');
+  const badge = numberLabel ? `
+    <circle cx="32" cy="9" r="8.5" fill="#ffffff" stroke="#12161d" stroke-width="1.5"/>
+    <text x="32" y="12.5" font-family="Arial, sans-serif" font-size="11" font-weight="700" fill="#12161d" text-anchor="middle">${numberLabel}</text>` : '';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 40 40">
+    <circle cx="20" cy="20" r="17" fill="${color}" stroke="#12161d" stroke-width="2.5"/>
+    ${glyph}
+    ${badge}
+  </svg>`;
+  return 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg);
+}
+function categoryPinIcon(site, size, numberLabel){
   const color = managerColor(site.manager);
   const category = site.category || 'General';
-  const shapePath = CATEGORY_SHAPES[category];
-  if(!shapePath) return pinIcon(color, sizeScale); // 'General' (and anything unrecognized) stays a circle
   return {
-    path: shapePath, fillColor: color, fillOpacity: 1,
-    strokeColor: '#12161d', strokeWeight: 1.5,
-    scale: sizeScale / 8
+    url: categoryIconUrl(category, color, numberLabel || null),
+    scaledSize: new google.maps.Size(size, size),
+    anchor: new google.maps.Point(size / 2, size / 2)
   };
 }
 function categoryShapeSvg(category){
-  const shapePath = CATEGORY_SHAPES[category];
-  if(!shapePath) return `<svg width="12" height="12" viewBox="-9 -9 18 18"><circle cx="0" cy="0" r="7" fill="#c7ccd6"/></svg>`;
-  return `<svg width="12" height="12" viewBox="-9 -9 18 18"><path d="${shapePath}" fill="#c7ccd6"/></svg>`;
+  const glyph = categoryGlyphSvg(category, '#12161d');
+  return `<svg width="16" height="16" viewBox="0 0 40 40"><circle cx="20" cy="20" r="17" fill="#c7ccd6"/>${glyph}</svg>`;
 }
 
 function renderLegend(){
@@ -1249,7 +1268,7 @@ async function computeRoute(){
       if(!s.valid || state.checked.has(s.id)) return;
       const marker = new google.maps.Marker({
         position: { lat: s.lat, lng: s.lng }, map, title: `${s.name} (${s.manager} · ${s.category || 'General'})`,
-        icon: categoryPinIcon(s, 6)
+        icon: categoryPinIcon(s, 26)
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(s)); infoWindow.open(map, marker); });
       currentMarkers.push(marker);
@@ -1369,8 +1388,7 @@ async function computeRoute(){
     route.forEach((r, i) => {
       const marker = new google.maps.Marker({
         position: { lat: r.site.lat, lng: r.site.lng }, map, title: `${r.site.name} (${r.site.manager} · ${r.site.category || 'General'})`,
-        icon: categoryPinIcon(r.site, 11),
-        label: { text: String(i + 1), color: '#12161d', fontWeight: '700', fontSize: '12px' }
+        icon: categoryPinIcon(r.site, 34, i + 1)
       });
       marker.addListener('click', () => { infoWindow.setContent(popupHtml(r.site)); infoWindow.open(map, marker); });
       currentMarkers.push(marker);
