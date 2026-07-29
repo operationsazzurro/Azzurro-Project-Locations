@@ -571,6 +571,7 @@ function normalizeCategory(raw){
   const c = (raw || '').trim().toLowerCase().replace(/s$/, ''); // strip a trailing plural 's'
   if(c === 'mosque') return 'Mosque';
   if(c === 'school') return 'School';
+  if(c === 'camp') return 'Camp';
   return 'General';
 }
 function categoryGlyphSvg(rawCategory, glyphFill, bgFill){
@@ -585,6 +586,11 @@ function categoryGlyphSvg(rawCategory, glyphFill, bgFill){
   if(category === 'School'){
     // Simplified graduation cap (mortarboard + band)
     return `<polygon points="20,11 29,16 20,21 11,16" fill="${glyphFill}"/><rect x="17" y="21" width="6" height="2" fill="${glyphFill}"/>`;
+  }
+  if(category === 'Camp'){
+    // Tent: a solid triangle with a smaller background-colored triangle
+    // notched out of the bottom center as the entrance flap.
+    return `<polygon points="20,9 32,27 8,27" fill="${glyphFill}"/><polygon points="20,16 25,27 15,27" fill="${bgFill}"/>`;
   }
   // General (and anything unrecognized): plain colored pin, no glyph.
   return '';
@@ -819,7 +825,7 @@ function populateDatalists(){
   const emirates = [...new Set(SITES.map(s => s.emirate).filter(Boolean))];
   ['DUBAI','SHARJAH','ABU DHABI','AJMAN','FUJAIRAH','RAS AL KHAIMAH','UMM AL QUWAIN'].forEach(e => { if(!emirates.includes(e)) emirates.push(e); });
   document.getElementById('emirateList').innerHTML = emirates.map(e => `<option value="${e}">`).join('');
-  const categoryOptions = [...new Set(['General','Mosque','School', ...SITES.map(s => s.category).filter(Boolean)])];
+  const categoryOptions = [...new Set(['General','Mosque','School','Camp', ...SITES.map(s => s.category).filter(Boolean)])];
   document.getElementById('categoryList').innerHTML = categoryOptions.map(c => `<option value="${c}">`).join('');
 }
 
